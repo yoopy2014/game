@@ -25,7 +25,7 @@
             background-color: #000;
             overflow: hidden;
         }
-        /* スクロール感を出すための背景の「星や床のライン」 */
+        /* スクロール感を出すための背景のライン */
         .bg-line {
             position: absolute;
             height: 2px;
@@ -43,9 +43,21 @@
         .bone {
             position: absolute;
             width: 15px;
-            background-color: #fff; /* 白い骨 */
+            background-color: #fff;
             border-radius: 4px;
             z-index: 5;
+        }
+        /* サンズの攻撃：ブラスターのレーザー */
+        .laser {
+            position: absolute;
+            left: 0;
+            width: 800px;
+            background-color: #fff; /* 白い極太ビーム */
+            border-top: 4px solid #00f; /* サンズ風に青と黄色の縁取り */
+            border-bottom: 4px solid #f00;
+            z-index: 6;
+            opacity: 0; /* 最初は透明（予告線用） */
+            transition: opacity 0.1s;
         }
     </style>
 </head>
@@ -55,26 +67,70 @@
     <div id="game-stage"></div>
 
     <script>
+        // 1. --- Cloudflare Workersへの接続情報 ---
+        const WorkersURL = "game.yoopy2014.workers.dev"; 
+
+        // 2. --- ゲームの設定と状態 ---
         const myId = "player_" + Math.floor(Math.random() * 10000);
         const myColor = '#' + Math.floor(Math.random()*16777215).toString(16);
-
-        // 先ほど確定したCloudflare WorkersのURLに接続！
-        const ws = new WebSocket("wss://game.yoopy2014.workers.dev/ws");
-        const stage = document.getElementById("game-stage");
-
         let myPos = { x: 100, y: 190 };
         const SPEED = 6;
         const keys = {};
-        const players = {};
-        let obstacles = [];
-        let bgLines = [];
+        const obstacles = [];
+        const bgLines = [];
+        let lasers = []; // レーザー管理用
         let gameTick = 0;
+        let ws = null; 
+        let stage = null; 
 
-        // --- 1. 背景の疑似スクロール線の初期化 ---
-        for(let i=0; i<15; i++) {
-            createBGLine(Math.random() * 800);
+        // 3. --- 全てのロードが完了してから安全にスタート ---
+        window.onload = function() {
+            stage = document.getElementById("game-stage");
+            
+            // 背景の疑似スクロール線の初期化
+            for(let i=0; i<15; i++) {
+                createBGLine(Math.random() * 800);
+            }
+
+            // キーボード入力の監視
+            window.addEventListener("keydown", (e) => { keys[e.key] = true; });
+            window.addEventListener("keyup", (e) => { keys[e.key] = false; });
+
+            // 通信サーバーへの接続
+            connectToWebSocket();
+
+            // ゲームループ開始
+            gameLoop();
+        };
+
+        // 4. --- 通信サーバーとの接続＆自動再接続 ---
+        function connectToWebSocket() {
+            ws = new WebSocket("wss://" + WorkersURL + "/ws");
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                
+                if (data.type === "move") {
+                    let p = document.getElementById(data.id);
+                    if (!p) {
+                        p = document.createElement("div");
+                        p.id = data.id;
+                        p.className = "player";
+                        p.style.backgroundColor = data.color;
+                        stage.appendChild(p);
+                    }
+                    p.style.left = data.x + "px";
+                    p.style.top = data.y + "px";
+                }
+            };
+
+            ws.onclose = () => {
+                console.log("再接続中...");
+                setTimeout(connectToWebSocket, 2000);
+            };
         }
 
+        // --- 背景のライン生成 ---
         function createBGLine(startX) {
             const line = document.createElement("div");
             line.className = "bg-line";
@@ -84,105 +140,98 @@
             bgLines.push({ element: line, x: startX, speed: Math.random() * 4 + 2 });
         }
 
-        // --- 2. ネットワーク通信 ---
-        ws.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            
-            // プレイヤー位置の同期
-            if (data.type === "move") {
-                let p = document.getElementById(data.id);
-                if (!p) {
-                    p = document.createElement("div");
-                    p.id = data.id;
-                    p.className = "player";
-                    p.style.backgroundColor = data.color;
-                    stage.appendChild(p);
-                }
-                p.style.left = data.x + "px";
-                p.style.top = data.y + "px";
-            }
-        };
-
-        window.addEventListener("keydown", (e) => { keys[e.key] = true; });
-        window.addEventListener("keyup", (e) => { keys[e.key] = false; });
-
-        // --- 3. メインゲームループ ---
+        // --- 5. メインゲームループ ---
         function gameLoop() {
             gameTick++;
             let moved = false;
 
-            // プレイヤー移動（上下左右）
+            // プレイヤーの移動
             if (keys["ArrowUp"] || keys["w"]) { myPos.y -= SPEED; moved = true; }
             if (keys["ArrowDown"] || keys["s"]) { myPos.y += SPEED; moved = true; }
             if (keys["ArrowLeft"] || keys["a"]) { myPos.x -= SPEED; moved = true; }
             if (keys["ArrowRight"] || keys["d"]) { myPos.x += SPEED; moved = true; }
 
-            // 画面外はみ出し防止
+            // 画面外ブレーキ
             if (myPos.x < 0) myPos.x = 0; if (myPos.x > 780) myPos.x = 780;
             if (myPos.y < 0) myPos.y = 0; if (myPos.y > 380) myPos.y = 380;
 
-            // 自分自身の画面更新
+            // 自分の位置を画面に反映
             let myDiv = document.getElementById(myId);
             if (!myDiv) {
                 myDiv = document.createElement("div");
                 myDiv.id = myId;
                 myDiv.className = "player";
                 myDiv.style.backgroundColor = myColor;
-                // 自分だと分かりやすいように枠線をつける
                 myDiv.style.border = "2px solid #fff"; 
                 stage.appendChild(myDiv);
             }
             myDiv.style.left = myPos.x + "px";
             myDiv.style.top = myPos.y + "px";
 
-            // 位置をサーバー経由で全員に同期
-            if (moved && ws.readyState === WebSocket.OPEN) {
+            // 位置を全員に同期
+            if (moved && ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: "move", id: myId, color: myColor, x: myPos.x, y: myPos.y }));
             }
 
-            // 背景のスクロール処理（左に流す）
+            // 背景スクロール
             bgLines.forEach(line => {
                 line.x -= line.speed;
                 if (line.x < -100) { line.x = 800; line.style.top = Math.random() * 400 + "px"; }
                 line.element.style.left = line.x + "px";
             });
 
-            // 骨（障害物）の自動生成（一定間隔で右端から出現）
+            // 【タイムライン攻撃】一定の間隔で骨を自動生成
             if (gameTick % 40 === 0) {
                 createBone();
             }
 
+            // 【タイムライン攻撃】120フレーム（約2秒）ごとにブラスターのレーザーを撃つ
+            if (gameTick % 120 === 0) {
+                triggerLaser();
+            }
+
             // 骨の移動と当たり判定
             obstacles.forEach((bone, index) => {
-                bone.x -= 5; // 骨の迫ってくるスピード
+                bone.x -= 5; 
                 bone.element.style.left = bone.x + "px";
 
-                // 簡単な矩形当たり判定（自分と骨が重なったか）
                 if (bone.x < myPos.x + 20 && bone.x + 15 > myPos.x &&
                     bone.y < myPos.y + 20 && bone.y + bone.h > myPos.y) {
-                    // 当たったらソウルを赤く点滅させて初期位置に戻す（ペナルティ）
-                    myPos = { x: 100, y: 190 };
-                    myDiv.style.backgroundColor = "#f00";
-                    setTimeout(() => { myDiv.style.backgroundColor = myColor; }, 200);
+                    hitPenalty(myDiv);
                 }
 
-                // 画面外に出た骨を削除
                 if (bone.x < -20) {
                     bone.element.remove();
                     obstacles.splice(index, 1);
                 }
             });
 
+            // レーザーの当たり判定と寿命管理
+            lasers.forEach((laser, index) => {
+                // 警告時間が終わり、実際にビームが発射されている時（isActive）だけ当たり判定
+                if (laser.isActive) {
+                    if (myPos.y + 20 > laser.y && myPos.y < laser.y + laser.h) {
+                        hitPenalty(myDiv);
+                    }
+                }
+                
+                // 発射して15フレーム（約0.25秒）で消滅
+                laser.life--;
+                if (laser.life <= 0) {
+                    laser.element.remove();
+                    lasers.splice(index, 1);
+                }
+            });
+
             requestAnimationFrame(gameLoop);
         }
 
-        // 骨を生成する関数（上から生える骨、下から生える骨をランダムに）
+        // --- 骨の生成 ---
         function createBone() {
             const bone = document.createElement("div");
             bone.className = "bone";
-            
             const isTop = Math.random() > 0.5;
-            const height = Math.random() * 150 + 50; // 50px〜200pxのランダムな長さ
+            const height = Math.random() * 150 + 50; 
             const yPos = isTop ? 0 : (400 - height);
 
             bone.style.height = height + "px";
@@ -193,7 +242,39 @@
             obstacles.push({ element: bone, x: 800, y: yPos, h: height });
         }
 
-        gameLoop();
+        // --- ガスターブラスター（レーザー）の発射演出 ---
+        function triggerLaser() {
+            const laser = document.createElement("div");
+            laser.className = "laser";
+            
+            const height = 60; // レーザーの太さ
+            const yPos = Math.random() * (400 - height); // ランダムな高さに発射
+
+            laser.style.height = height + "px";
+            laser.style.top = yPos + "px";
+            stage.appendChild(laser);
+
+            const laserObj = { element: laser, y: yPos, h: height, isActive: false, life: 45 }; // トータル寿命45フレーム
+            lasers.push(laserObj);
+
+            // 1. まず赤色のうっすらした予告線を出す（本家サンズ戦の演出！）
+            laser.style.opacity = "0.2";
+            laser.style.backgroundColor = "#f00";
+
+            // 2. 0.5秒後（30フレーム後）に、本発射（極太の白ビームに変化！）
+            setTimeout(() => {
+                laserObj.isActive = true;
+                laser.style.opacity = "1";
+                laser.style.backgroundColor = "#fff";
+            }, 500);
+        }
+
+        // --- ダメージを受けた時のペナルティ処理 ---
+        function hitPenalty(div) {
+            myPos = { x: 100, y: 190 }; // 初期位置に戻される
+            div.style.backgroundColor = "#f00"; 
+            setTimeout(() => { div.style.backgroundColor = myColor; }, 200);
+        }
     </script>
 </body>
 </html>
