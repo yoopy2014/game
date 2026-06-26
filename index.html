@@ -150,6 +150,11 @@
         const overlay = document.getElementById("overlay");
         let touchTarget = null; 
 
+        // --- 高速リフレッシュレート（高FPSタブレット）対策用の変数 ---
+        let lastTime = performance.now();
+        const fpsInterval = 1000 / 60; // 60FPSベース（1秒間に60回、約16.6msに1回処理）
+        let accumulatedTime = 0;
+
         // --- BGMシステム ---
         const bgm = document.getElementById("bgm-player");
         const BGM_WAITING_URL = "game_waiting.mp3"; 
@@ -171,9 +176,7 @@
             bgm.src = targetUrl;
             bgm.volume = 0.25;
             
-            bgm.play().catch(() => {
-                console.log("オーディオ再生制限を回避中");
-            });
+            bgm.play().catch(() => {});
         }
         // ------------------
 
@@ -205,7 +208,6 @@
         stage.addEventListener("touchmove", updateTouchTarget, { passive: true });
         stage.addEventListener("touchend", () => { touchTarget = null; }, { passive: true });
 
-        // パスワード機能
         document.getElementById("btn-start").addEventListener("click", () => {
             bgm.play().catch(()=>{});
             if (currentStatus !== "waiting") return;
@@ -265,27 +267,23 @@
                         obstacles.push({ element: bone, x: 800, y: yPos, h: data.height });
                     }
 
-                    // --- 【修正箇所】レーザーの出現と発射タイミングの調整 ---
                     if (data.type === "spawnLaser") {
                         const laser = document.createElement("div");
                         laser.className = "laser";
                         laser.style.height = data.height + "px"; laser.style.top = data.yPos + "px";
                         stage.appendChild(laser);
                         
-                        // lifeを45から75に増やして、太いレーザーが消えるまでの全体の生存時間を長く調整
                         const laserObj = { element: laser, y: data.yPos, h: data.height, isActive: false, life: 75 };
                         lasers.push(laserObj);
                         
-                        laser.style.opacity = "0.2"; laser.style.backgroundColor = "#f00"; // 予兆（赤い線）
+                        laser.style.opacity = "0.2"; laser.style.backgroundColor = "#f00";
                         
-                        // ここの「500」を「1000」(1.0秒) にして、発射までの猶予を遅くしました！
                         setTimeout(() => { 
                             laserObj.isActive = true; 
                             laser.style.opacity = "1"; 
-                            laser.style.backgroundColor = "#fff"; // 本発射（判定ありの白い線）
+                            laser.style.backgroundColor = "#fff"; 
                         }, 1000); 
                     }
-                    // -----------------------------------------------------
 
                     if (data.type === "init") { 
                         updateLeaderboard(data.players); 
@@ -332,9 +330,28 @@
         }
 
         connectToWebSocket();
-        gameLoop();
+        
+        // メインループのトリガーを管理する関数に変更
+        function renderAnimationFrame(currentTime) {
+            requestAnimationFrame(renderAnimationFrame);
+            
+            // 前回の処理からの経過時間を計算
+            let deltaTime = currentTime - lastTime;
+            lastTime = currentTime;
+            
+            // 経過時間を蓄積
+            accumulatedTime += deltaTime;
+            
+            // タブレットやPCの画面性能（Hz）に関係なく、16.6ms（60FPS）ごとにのみゲームロジックを実行するブレーキ
+            while (accumulatedTime >= fpsInterval) {
+                updateGameLogic();
+                accumulatedTime -= fpsInterval;
+            }
+        }
+        requestAnimationFrame(renderAnimationFrame);
 
-        function gameLoop() {
+        // 【修正】これまでのgameLoopの中身をここに移行し、純粋な1ステップごとの計算処理にしました
+        function updateGameLogic() {
             gameTick++;
             let moved = false;
 
@@ -408,8 +425,6 @@
                 laser.life--;
                 if (laser.life <= 0) { laser.element.remove(); lasers.splice(index, 1); }
             });
-
-            requestAnimationFrame(gameLoop);
         }
 
         function hitPenalty(bodyDiv, penaltyAmount) {
