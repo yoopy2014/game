@@ -1,72 +1,4 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <title>3D/2Dサンズ風・同期スクロールレース</title>
-    <style>
-        body {
-            background-color: #000;
-            color: #fff;
-            font-family: monospace;
-            margin: 0;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-        }
-        /* ゲームのメインステージ */
-        #game-stage {
-            position: relative;
-            width: 800px;
-            height: 400px;
-            border: 4px solid #fff;
-            background-color: #000;
-            overflow: hidden;
-        }
-        /* スクロール感を出すための背景のライン */
-        .bg-line {
-            position: absolute;
-            height: 2px;
-            background-color: #333;
-            width: 100px;
-        }
-        /* プレイヤー（ソウル風の四角） */
-        .player {
-            position: absolute;
-            width: 20px;
-            height: 20px;
-            z-index: 10;
-        }
-        /* サンズの攻撃：骨 */
-        .bone {
-            position: absolute;
-            width: 15px;
-            background-color: #fff;
-            border-radius: 4px;
-            z-index: 5;
-        }
-        /* サンズの攻撃：ブラスターのレーザー */
-        .laser {
-            position: absolute;
-            left: 0;
-            width: 800px;
-            background-color: #fff; /* 白い極太ビーム */
-            border-top: 4px solid #00f; /* サンズ風に青と黄色の縁取り */
-            border-bottom: 4px solid #f00;
-            z-index: 6;
-            opacity: 0; /* 最初は透明（予告線用） */
-            transition: opacity 0.1s;
-        }
-    </style>
-</head>
-<body>
-
-    <h1>3D/2D SANS SPEEDRUN</h1>
-    <div id="game-stage"></div>
-
-    <script>
+<script>
         // 1. --- Cloudflare Workersへの接続情報 ---
         const WorkersURL = "game.yoopy2014.workers.dev"; 
 
@@ -78,69 +10,70 @@
         const keys = {};
         const obstacles = [];
         const bgLines = [];
-        let lasers = []; // レーザー管理用
+        let lasers = []; 
         let gameTick = 0;
         let ws = null; 
-        let stage = null; 
-
-        // 3. --- 全てのロードが完了してから安全にスタート ---
-        window.onload = function() {
-            stage = document.getElementById("game-stage");
-            
-            // 背景の疑似スクロール線の初期化
-            for(let i=0; i<15; i++) {
-                createBGLine(Math.random() * 800);
-            }
-
-            // キーボード入力の監視
-            window.addEventListener("keydown", (e) => { keys[e.key] = true; });
-            window.addEventListener("keyup", (e) => { keys[e.key] = false; });
-
-            // 通信サーバーへの接続
-            connectToWebSocket();
-
-            // ゲームループ開始
-            gameLoop();
-        };
-
-        // 4. --- 通信サーバーとの接続＆自動再接続 ---
-        function connectToWebSocket() {
-            ws = new WebSocket("wss://" + WorkersURL + "/ws");
-
-            ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                
-                if (data.type === "move") {
-                    let p = document.getElementById(data.id);
-                    if (!p) {
-                        p = document.createElement("div");
-                        p.id = data.id;
-                        p.className = "player";
-                        p.style.backgroundColor = data.color;
-                        stage.appendChild(p);
-                    }
-                    p.style.left = data.x + "px";
-                    p.style.top = data.y + "px";
-                }
-            };
-
-            ws.onclose = () => {
-                console.log("再接続中...");
-                setTimeout(connectToWebSocket, 2000);
-            };
-        }
+        
+        // ページが読み込まれた瞬間、即座にステージ要素を取得
+        const stage = document.getElementById("game-stage") || document.body;
 
         // --- 背景のライン生成 ---
-        function createBGLine(startX) {
+        for(let i=0; i<15; i++) {
             const line = document.createElement("div");
             line.className = "bg-line";
-            line.style.left = startX + "px";
+            line.style.left = Math.random() * 800 + "px";
             line.style.top = Math.random() * 400 + "px";
             stage.appendChild(line);
-            bgLines.push({ element: line, x: startX, speed: Math.random() * 4 + 2 });
+            bgLines.push({ element: line, x: parseFloat(line.style.left), speed: Math.random() * 4 + 2 });
         }
 
-        // --- 5. メインゲームループ ---
+        // キーボード入力の監視（いつでも受け付ける状態にする）
+        window.addEventListener("keydown", (e) => { keys[e.key] = true; });
+        window.addEventListener("keyup", (e) => { keys[e.key] = false; });
+
+        // --- 3. 通信サーバーとの接続（エラーが出ても死なない自動リトライ型） ---
+        function connectToWebSocket() {
+            try {
+                // すでに接続がある場合は一度閉じる
+                if (ws) { ws.close(); }
+
+                ws = new WebSocket("wss://" + WorkersURL + "/ws");
+
+                ws.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    if (data.type === "move" && data.id !== myId) {
+                        let p = document.getElementById(data.id);
+                        if (!p) {
+                            p = document.createElement("div");
+                            p.id = data.id;
+                            p.className = "player";
+                            p.style.backgroundColor = data.color;
+                            stage.appendChild(p);
+                        }
+                        p.style.left = data.x + "px";
+                        p.style.top = data.y + "px";
+                    }
+                };
+
+                ws.onclose = () => {
+                    // 切断されたら1秒後に再接続
+                    setTimeout(connectToWebSocket, 1000);
+                };
+
+                ws.onerror = () => {
+                    // エラーが出ても無視して再接続に回す
+                };
+            } catch (e) {
+                // 接続処理自体が失敗しても1秒後にやり直す
+                setTimeout(connectToWebSocket, 1000);
+            }
+        }
+
+        // ページ読み込み完了を待たずに、即座に通信とループをスタート！！
+        connectToWebSocket();
+        gameLoop();
+
+        // --- 4. メインゲームループ ---
         function gameLoop() {
             gameTick++;
             let moved = false;
@@ -168,59 +101,46 @@
             myDiv.style.left = myPos.x + "px";
             myDiv.style.top = myPos.y + "px";
 
-            // 位置を全員に同期
+            // 位置を全員に同期（繋がっている時だけ送る。繋がってなくてもゲームは止めない！）
             if (moved && ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: "move", id: myId, color: myColor, x: myPos.x, y: myPos.y }));
+                try {
+                    ws.send(JSON.stringify({ type: "move", id: myId, color: myColor, x: myPos.x, y: myPos.y }));
+                } catch(e) {}
             }
 
             // 背景スクロール
             bgLines.forEach(line => {
                 line.x -= line.speed;
-                if (line.x < -100) { line.x = 800; line.style.top = Math.random() * 400 + "px"; }
+                if (line.x < -100) { line.x = 800; line.element.style.top = Math.random() * 400 + "px"; }
                 line.element.style.left = line.x + "px";
             });
 
-            // 【タイムライン攻撃】一定の間隔で骨を自動生成
-            if (gameTick % 40 === 0) {
-                createBone();
-            }
+            // タイムライン攻撃：骨
+            if (gameTick % 40 === 0) { createBone(); }
 
-            // 【タイムライン攻撃】120フレーム（約2秒）ごとにブラスターのレーザーを撃つ
-            if (gameTick % 120 === 0) {
-                triggerLaser();
-            }
+            // タイムライン攻撃：レーザー
+            if (gameTick % 120 === 0) { triggerLaser(); }
 
             // 骨の移動と当たり判定
             obstacles.forEach((bone, index) => {
                 bone.x -= 5; 
                 bone.element.style.left = bone.x + "px";
-
                 if (bone.x < myPos.x + 20 && bone.x + 15 > myPos.x &&
                     bone.y < myPos.y + 20 && bone.y + bone.h > myPos.y) {
                     hitPenalty(myDiv);
                 }
-
-                if (bone.x < -20) {
-                    bone.element.remove();
-                    obstacles.splice(index, 1);
-                }
+                if (bone.x < -20) { bone.element.remove(); obstacles.splice(index, 1); }
             });
 
-            // レーザーの当たり判定と寿命管理
+            // レーザーの当たり判定
             lasers.forEach((laser, index) => {
-                // 警告時間が終わり、実際にビームが発射されている時（isActive）だけ当たり判定
                 if (laser.isActive) {
                     if (myPos.y + 20 > laser.y && myPos.y < laser.y + laser.h) {
                         hitPenalty(myDiv);
                     }
                 }
-                
-                // 発射して15フレーム（約0.25秒）で消滅
                 laser.life--;
-                if (laser.life <= 0) {
-                    laser.element.remove();
-                    lasers.splice(index, 1);
-                }
+                if (laser.life <= 0) { laser.element.remove(); lasers.splice(index, 1); }
             });
 
             requestAnimationFrame(gameLoop);
@@ -233,35 +153,29 @@
             const isTop = Math.random() > 0.5;
             const height = Math.random() * 150 + 50; 
             const yPos = isTop ? 0 : (400 - height);
-
             bone.style.height = height + "px";
             bone.style.top = yPos + "px";
             bone.style.left = "800px";
             stage.appendChild(bone);
-
             obstacles.push({ element: bone, x: 800, y: yPos, h: height });
         }
 
-        // --- ガスターブラスター（レーザー）の発射演出 ---
+        // --- レーザーの発射演出 ---
         function triggerLaser() {
             const laser = document.createElement("div");
             laser.className = "laser";
-            
-            const height = 60; // レーザーの太さ
-            const yPos = Math.random() * (400 - height); // ランダムな高さに発射
-
+            const height = 60; 
+            const yPos = Math.random() * (400 - height); 
             laser.style.height = height + "px";
             laser.style.top = yPos + "px";
             stage.appendChild(laser);
 
-            const laserObj = { element: laser, y: yPos, h: height, isActive: false, life: 45 }; // トータル寿命45フレーム
+            const laserObj = { element: laser, y: yPos, h: height, isActive: false, life: 45 }; 
             lasers.push(laserObj);
 
-            // 1. まず赤色のうっすらした予告線を出す（本家サンズ戦の演出！）
             laser.style.opacity = "0.2";
             laser.style.backgroundColor = "#f00";
 
-            // 2. 0.5秒後（30フレーム後）に、本発射（極太の白ビームに変化！）
             setTimeout(() => {
                 laserObj.isActive = true;
                 laser.style.opacity = "1";
@@ -269,12 +183,10 @@
             }, 500);
         }
 
-        // --- ダメージを受けた時のペナルティ処理 ---
+        // --- ペナルティ処理 ---
         function hitPenalty(div) {
-            myPos = { x: 100, y: 190 }; // 初期位置に戻される
+            myPos = { x: 100, y: 190 }; 
             div.style.backgroundColor = "#f00"; 
             setTimeout(() => { div.style.backgroundColor = myColor; }, 200);
         }
     </script>
-</body>
-</html>
