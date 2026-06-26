@@ -7,14 +7,12 @@
     <style>
         * { box-sizing: border-box; }
         
-        /* 【修正】縦に長い画面（タブレットやスマホ）で下にスクロールできるように overflow を変更 */
         body {
             background-color: #000; color: #fff; font-family: monospace;
-            margin: 0; padding: 15px; overflow-x: hidden; overflow-y: auto;
+            margin: 0; padding: 10px; overflow-x: hidden; overflow-y: auto;
             display: flex; flex-direction: column; align-items: center; min-height: 100vh; touch-action: none; 
         }
         
-        /* 【修正】親要素の高さ縛りを無くし、横並びの時も縦並びの時も綺麗にフィットさせる */
         .game-wrapper {
             display: flex;
             flex-direction: row;
@@ -30,19 +28,23 @@
             flex-direction: column;
             align-items: center;
             min-width: 0;
+            width: 100%;
         }
 
+        /* 【★最重要修正】ゲーム画面が縦に長くなりすぎて画面を突き抜けるのを完全に防ぐ */
         #game-stage {
             position: relative;
             width: 100%;
+            /* 縦横比を2:1に保ちつつ、画面の高さの55%を超えないように強制ブレーキ */
             aspect-ratio: 2 / 1;
+            max-height: 55vh; 
+            margin: 0 auto;
             border: 4px solid #fff;
             background-color: #000;
             overflow: hidden;
             -webkit-tap-highlight-color: transparent;
         }
 
-        /* 【修正】タブレット等で横並びの時、ランキングが縦に潰れないように最小高さを確保 */
         #leaderboard {
             flex: 0.6;
             border: 4px solid #fff;
@@ -51,16 +53,16 @@
             display: flex;
             flex-direction: column;
             min-width: 200px;
-            min-height: 250px; 
-            max-height: 500px;
+            min-height: 200px; 
+            max-height: 450px;
             overflow-y: auto;
         }
         #leaderboard h2 { font-size: 16px; margin: 0 0 10px 0; border-bottom: 2px solid #fff; padding-bottom: 5px; text-align: center; }
         .rank-item { display: flex; justify-content: space-between; padding: 6px; margin-bottom: 5px; background: #222; font-size: 13px; border-radius: 4px; }
 
-        #timer-display { font-size: 20px; font-weight: bold; margin-bottom: 5px; color: #ff0; text-align: center; }
+        #timer-display { font-size: 18px; font-weight: bold; margin-bottom: 5px; color: #ff0; text-align: center; }
         #control-panel { margin-bottom: 10px; display: flex; gap: 10px; }
-        button { background: #fff; color: #000; border: none; padding: 8px 16px; font-weight: bold; cursor: pointer; font-family: monospace; font-size: 13px; }
+        button { background: #fff; color: #000; border: none; padding: 6px 12px; font-weight: bold; cursor: pointer; font-family: monospace; font-size: 12px; }
         button:hover { background: #ccc; }
         
         .bg-line { position: absolute; height: 2px; background-color: #333; width: 100px; }
@@ -93,10 +95,12 @@
         
         #overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; text-align: center; }
 
-        /* 【重要】iPadや横幅が900px以下の端末、またはスマホは自動で縦並びにスイッチ */
+        /* タブレット・スマホ用の縦並び切り替え */
         @media (max-width: 900px) {
-            .game-wrapper { flex-direction: column; width: 95vw; }
-            #leaderboard { width: 100%; min-height: 180px; max-height: 220px; }
+            .game-wrapper { flex-direction: column; width: 95vw; gap: 10px; }
+            #leaderboard { width: 100%; min-height: 150px; max-height: 200px; }
+            /* 縦並びの時はゲーム画面が小さくなりすぎないようバランスを調整 */
+            #game-stage { max-height: 45vh; }
         }
     </style>
 </head>
