@@ -177,7 +177,7 @@
             if (currentStatus !== "waiting") return; // 待機中以外は無視
             
             const inputPass = prompt("管理用パスワードを入力してください：");
-            const CORRECT_PASSWORD = "1234"; // 🔑 ここを好きな数字や文字に変えられます
+            const CORRECT_PASSWORD = "Yoshichat"; // 🔑 ここを好きな数字や文字に変えられます
 
             if (inputPass === CORRECT_PASSWORD) {
                 if (ws && ws.readyState === WebSocket.OPEN) { 
