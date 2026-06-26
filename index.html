@@ -31,11 +31,9 @@
             width: 100%;
         }
 
-        /* 【★最重要修正】ゲーム画面が縦に長くなりすぎて画面を突き抜けるのを完全に防ぐ */
         #game-stage {
             position: relative;
             width: 100%;
-            /* 縦横比を2:1に保ちつつ、画面の高さの55%を超えないように強制ブレーキ */
             aspect-ratio: 2 / 1;
             max-height: 55vh; 
             margin: 0 auto;
@@ -95,11 +93,9 @@
         
         #overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; text-align: center; }
 
-        /* タブレット・スマホ用の縦並び切り替え */
         @media (max-width: 900px) {
             .game-wrapper { flex-direction: column; width: 95vw; gap: 10px; }
             #leaderboard { width: 100%; min-height: 150px; max-height: 200px; }
-            /* 縦並びの時はゲーム画面が小さくなりすぎないようバランスを調整 */
             #game-stage { max-height: 45vh; }
         }
     </style>
@@ -176,9 +172,22 @@
         stage.addEventListener("touchmove", updateTouchTarget, { passive: true });
         stage.addEventListener("touchend", () => { touchTarget = null; }, { passive: true });
 
+        // 【★修正】スタート時にパスワード入力を求める
         document.getElementById("btn-start").addEventListener("click", () => {
-            if (ws && ws.readyState === WebSocket.OPEN) { ws.send(JSON.stringify({ type: "startGame" })); }
+            if (currentStatus !== "waiting") return; // 待機中以外は無視
+            
+            const inputPass = prompt("管理用パスワードを入力してください：");
+            const CORRECT_PASSWORD = "1234"; // 🔑 ここを好きな数字や文字に変えられます
+
+            if (inputPass === CORRECT_PASSWORD) {
+                if (ws && ws.readyState === WebSocket.OPEN) { 
+                    ws.send(JSON.stringify({ type: "startGame" })); 
+                }
+            } else if (inputPass !== null) {
+                alert("パスワードが違います！開始できません。");
+            }
         });
+
         document.getElementById("btn-reset").addEventListener("click", () => {
             if (ws && ws.readyState === WebSocket.OPEN) { ws.send(JSON.stringify({ type: "resetGame" })); }
         });
