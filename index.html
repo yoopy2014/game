@@ -12,25 +12,88 @@
             display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; touch-action: none; 
         }
         
-        .game-wrapper { display: flex; flex-direction: row; gap: 15px; width: 95vw; max-width: 1050px; aspect-ratio: 2.6 / 1; }
-        #game-area { flex: 2; display: flex; flex-direction: column; align-items: center; }
-        #game-stage { position: relative; width: 100%; aspect-ratio: 2 / 1; border: 4px solid #fff; background-color: #000; overflow: hidden; -webkit-tap-highlight-color: transparent; }
-        #leaderboard { flex: 0.6; border: 4px solid #fff; background-color: #111; padding: 10px; display: flex; flex-direction: column; }
-        #leaderboard h2 { font-size: 18px; margin: 0 0 10px 0; border-bottom: 2px solid #fff; padding-bottom: 5px; text-align: center; }
-        .rank-item { display: flex; justify-content: space-between; padding: 6px; margin-bottom: 5px; background: #222; font-size: 14px; border-radius: 4px; }
-        #timer-display { font-size: 24px; font-weight: bold; margin-bottom: 5px; color: #ff0; text-align: center; }
+        .game-wrapper {
+            display: flex;
+            flex-direction: row;
+            gap: 15px;
+            width: 95vw;
+            max-width: 1050px;
+            max-height: 75vh;
+        }
+
+        #game-area {
+            flex: 2;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 0;
+        }
+
+        #game-stage {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 2 / 1;
+            border: 4px solid #fff;
+            background-color: #000;
+            overflow: hidden;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        #leaderboard {
+            flex: 0.6;
+            border: 4px solid #fff;
+            background-color: #111;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            min-width: 180px;
+            overflow-y: auto;
+        }
+        #leaderboard h2 { font-size: 16px; margin: 0 0 10px 0; border-bottom: 2px solid #fff; padding-bottom: 5px; text-align: center; }
+        .rank-item { display: flex; justify-content: space-between; padding: 6px; margin-bottom: 5px; background: #222; font-size: 13px; border-radius: 4px; }
+
+        #timer-display { font-size: 20px; font-weight: bold; margin-bottom: 5px; color: #ff0; text-align: center; }
         #control-panel { margin-bottom: 10px; display: flex; gap: 10px; }
-        button { background: #fff; color: #000; border: none; padding: 6px 15px; font-weight: bold; cursor: pointer; font-family: monospace; }
+        button { background: #fff; color: #000; border: none; padding: 6px 12px; font-weight: bold; cursor: pointer; font-family: monospace; font-size: 12px; }
         button:hover { background: #ccc; }
+        
         .bg-line { position: absolute; height: 2px; background-color: #333; width: 100px; }
-        .player-container { position: absolute; width: 20px; height: 20px; z-index: 10; display: flex; flex-direction: column; align-items: center; }
+        
+        /* 【修正】プレイヤーのコンテナサイズを、名前タグがはみ出さないように調整 */
+        .player-container { 
+            position: absolute; 
+            width: 20px; 
+            height: 20px; 
+            z-index: 10; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+        }
         .player-body { width: 20px; height: 20px; }
-        .player-name { position: absolute; bottom: 24px; white-space: nowrap; font-size: 12px; color: #fff; background-color: rgba(0, 0, 0, 0.7); padding: 2px 6px; border-radius: 3px; border: 1px solid #555; }
+        
+        /* 【修正】名前の位置をプレイヤー本体からの相対位置で安定させる */
+        .player-name { 
+            position: absolute; 
+            bottom: 24px; 
+            white-space: nowrap; 
+            font-size: 11px; 
+            color: #fff; 
+            background-color: rgba(0, 0, 0, 0.8); 
+            padding: 2px 6px; 
+            border-radius: 3px; 
+            border: 1px solid #555; 
+        }
         .other-player { opacity: 0.6; }
         .bone { position: absolute; width: 15px; background-color: #fff; border-radius: 4px; z-index: 5; }
-        .laser { position: absolute; left: 0; width: 800px; background-color: #fff; border-top: 4px solid #00f; border-bottom: 4px solid #f00; z-index: 6; opacity: 0; transition: opacity 0.1s; }
-        #overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 32px; font-weight: bold; text-align: center; }
-        @media (max-width: 600px) { .game-wrapper { flex-direction: column; aspect-ratio: auto; height: auto; } #leaderboard { width: 100%; } }
+        .laser { position: absolute; left: 0; width: 100%; background-color: #fff; border-top: 4px solid #00f; border-bottom: 4px solid #f00; z-index: 6; opacity: 0; transition: opacity 0.1s; }
+        
+        #overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; text-align: center; }
+
+        @media (max-width: 768px) {
+            body { overflow-y: auto; height: auto; }
+            .game-wrapper { flex-direction: column; max-height: none; width: 95vw; }
+            #leaderboard { width: 100%; height: 150px; }
+        }
     </style>
 </head>
 <body>
@@ -95,6 +158,7 @@
             if (e.touches.length === 0 || currentStatus !== "playing") return;
             const touch = e.touches[0];
             const rect = stage.getBoundingClientRect();
+            // 仮想の800x400座標に変換
             touchTarget = {
                 x: (touch.clientX - rect.left) * (800 / rect.width) - 10,
                 y: (touch.clientY - rect.top) * (400 / rect.height) - 10
@@ -124,7 +188,6 @@
                         currentStatus = data.state.status;
                         if (currentStatus === "waiting") {
                             timerDisplay.innerText = "待機中..."; overlay.style.display = "none"; myDeaths = 0;
-                            // 画面上の残ったオブジェクトを消去
                             obstacles.forEach(b => b.element.remove()); obstacles = [];
                             lasers.forEach(l => l.element.remove()); lasers = [];
                         } else if (currentStatus === "countdown") {
@@ -136,7 +199,6 @@
                         }
                     }
 
-                    // 【★新機能】サーバーからの骨発生の合図を受け取る
                     if (data.type === "spawnBone") {
                         const bone = document.createElement("div");
                         bone.className = "bone";
@@ -146,7 +208,6 @@
                         obstacles.push({ element: bone, x: 800, y: yPos, h: data.height });
                     }
 
-                    // 【★新機能】サーバーからのレーザー発生の合図を受け取る
                     if (data.type === "spawnLaser") {
                         const laser = document.createElement("div");
                         laser.className = "laser";
@@ -174,7 +235,10 @@
                             }
                             pContainer.querySelector(".player-name").innerText = pData.name + " (" + pData.deaths + "💀)";
                             pContainer.querySelector(".player-body").style.backgroundColor = pData.color;
-                            pContainer.style.left = pData.x + "px"; pContainer.style.top = pData.y + "px";
+                            
+                            // 仮想800x400基準の％に直して配置
+                            pContainer.style.left = (pData.x / 800 * 100) + "%";
+                            pContainer.style.top = (pData.y / 400 * 100) + "%";
                         }
                         const containers = stage.querySelectorAll(".other-player");
                         containers.forEach(c => { if (!data.players[c.id]) { c.remove(); } });
@@ -219,8 +283,12 @@
                         myPos.x = touchTarget.x; myPos.y = touchTarget.y; moved = true;
                     }
                 }
-                if (myPos.x < 0) myPos.x = 0; if (myPos.x > 780) myPos.x = 780;
-                if (myPos.y < 0) myPos.y = 0; if (myPos.y > 380) myPos.y = 380;
+                
+                // 【★変更点】移動できる制限を少し内側（枠線の内側）に調整して、はみ出しを防ぐ
+                if (myPos.x < 5) myPos.x = 5; 
+                if (myPos.x > 775) myPos.x = 775;
+                if (myPos.y < 5) myPos.y = 5; 
+                if (myPos.y > 375) myPos.y = 375; // 一番下でも文字が埋まらないようにブロック
             }
 
             let myContainer = document.getElementById(myId);
@@ -232,7 +300,10 @@
             }
             myContainer.querySelector(".player-name").innerText = myName + " (" + myDeaths + "💀)";
             myContainer.querySelector(".player-body").style.backgroundColor = myColor;
-            myContainer.style.left = myPos.x + "px"; myContainer.style.top = myPos.y + "px";
+            
+            // 【★変更点】画面サイズが変わってもズレないように ％（パーセント）で描画位置を設定
+            myContainer.style.left = (myPos.x / 800 * 100) + "%";
+            myContainer.style.top = (myPos.y / 400 * 100) + "%";
 
             if (ws && ws.readyState === WebSocket.OPEN) {
                 if (moved || gameTick % 30 === 0) {
@@ -248,20 +319,18 @@
             bgLines.forEach(line => {
                 line.x -= line.speed;
                 if (line.x < -100) { line.x = 800; line.element.style.top = Math.random() * 400 + "px"; }
-                line.element.style.left = line.x + "px";
+                line.element.style.left = (line.x / 800 * 100) + "%";
             });
 
-            // 骨の移動と当たり判定（当たると1点加算）
             obstacles.forEach((bone, index) => {
                 bone.x -= 5; 
-                bone.element.style.left = bone.x + "px";
+                bone.element.style.left = (bone.x / 800 * 100) + "%";
                 if (currentStatus === "playing" && bone.x < myPos.x + 20 && bone.x + 15 > myPos.x && bone.y < myPos.y + 20 && bone.y + bone.h > myPos.y) {
                     hitPenalty(myContainer.querySelector(".player-body"), 1);
                 }
                 if (bone.x < -20) { bone.element.remove(); obstacles.splice(index, 1); }
             });
 
-            // レーザーの当たり判定（当たると15点加算）
             lasers.forEach((laser, index) => {
                 if (laser.isActive && currentStatus === "playing") {
                     if (myPos.y + 20 > laser.y && myPos.y < laser.y + laser.h) { 
