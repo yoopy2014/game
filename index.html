@@ -31,6 +31,7 @@
             width: 100%;
         }
 
+        /* 【画面切れ対策】縦横比を保ちつつ、画面の縦幅を超えないようにブレーキ */
         #game-stage {
             position: relative;
             width: 100%;
@@ -119,6 +120,8 @@
         </div>
     </div>
 
+    <audio id="bgm-player" loop preload="auto"></audio>
+
     <script>
         let myName = prompt("あなたの名前を入力してください：", "ゲスト");
         if (!myName || myName.trim() === "") { myName = "ゲスト"; }
@@ -148,81 +151,33 @@
         const overlay = document.getElementById("overlay");
         let touchTarget = null; 
 
-        // --- 【新機能】Web Audio API によるピコピコBGMシステム ---
-        let audioCtx = null;
-        let bgmInterval = null;
-        let bgmStep = 0;
-        let bgmBPM = 120;
+        // --- 【BGMシステム】自作オリジナル音楽ファイルの指定 ---
+        const bgm = document.getElementById("bgm-player");
+        const BGM_WAITING_URL = "game_waiting.mp3"; 
+        const BGM_PLAYING_URL = "game_playing.mp3"; 
 
-        // サンズ風のベースライン音階（周波数）
-        const NOTE_D3  = 146.83;
-        const NOTE_D4  = 293.66;
-        const NOTE_A3  = 220.00;
-        const NOTE_G3S = 207.65;
-        const NOTE_G3  = 196.00;
-        const NOTE_F3  = 174.61;
-        const NOTE_C3  = 130.81;
-        const NOTE_B2  = 123.47;
-
-        const bgmMelody = [
-            NOTE_D3, NOTE_D3, NOTE_D4, NOTE_A3, 0, NOTE_G3S, 0, NOTE_G3, 0, NOTE_F3, NOTE_D3, NOTE_F3, NOTE_G3,
-            NOTE_C3, NOTE_C3, NOTE_D4, NOTE_A3, 0, NOTE_G3S, 0, NOTE_G3, 0, NOTE_F3, NOTE_D3, NOTE_F3, NOTE_G3,
-            NOTE_B2, NOTE_B2, NOTE_D4, NOTE_A3, 0, NOTE_G3S, 0, NOTE_G3, 0, NOTE_F3, NOTE_D3, NOTE_F3, NOTE_G3,
-            NOTE_B2, NOTE_B2, NOTE_D4, NOTE_A3, 0, NOTE_G3S, 0, NOTE_G3, 0, NOTE_F3, NOTE_D3, NOTE_F3, NOTE_G3
-        ];
-
-        function initAudio() {
-            if (!audioCtx) {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playExternalBGM(status) {
+            let targetUrl = "";
+            if (status === "waiting" || status === "countdown") {
+                targetUrl = BGM_WAITING_URL;
+            } else if (status === "playing") {
+                targetUrl = BGM_PLAYING_URL;
             }
-            if (audioCtx.state === 'suspended') {
-                audioCtx.resume();
+
+            if (targetUrl === "" || (bgm.src.endsWith(targetUrl) && !bgm.paused)) {
+                if (status === "finished") bgm.pause();
+                return;
             }
-        }
 
-        function playTone(freq, duration) {
-            if (!audioCtx || freq === 0) return;
-            const osc = audioCtx.createOscillator();
-            const gainNode = audioCtx.createGain();
+            // 正しい相対パスまたはURLをセットして再生
+            bgm.src = targetUrl;
+            bgm.volume = 0.25; // 🔊 音量を25%に設定
             
-            // ファミコン風の矩形波(square)に設定
-            osc.type = 'square';
-            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-            
-            // 音量調節とフェードアウト
-            gainNode.gain.setValueAtTime(0.04, audioCtx.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
-            
-            osc.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
-            
-            osc.start();
-            osc.stop(audioCtx.currentTime + duration);
+            bgm.play().catch(() => {
+                console.log("オーディオ再生がブラウザにより制限されました。操作を待機します。");
+            });
         }
-
-        function startBGM(bpm) {
-            stopBGM();
-            initAudio();
-            bgmBPM = bpm;
-            bgmStep = 0;
-            const stepDuration = 60 / bgmBPM / 2; // 8分音符の長さ
-            
-            bgmInterval = setInterval(() => {
-                const note = bgmMelody[bgmStep % bgmMelody.length];
-                if (note > 0) {
-                    playTone(note, stepDuration * 0.9);
-                }
-                bgmStep++;
-            }, stepDuration * 1000);
-        }
-
-        function stopBGM() {
-            if (bgmInterval) {
-                clearInterval(bgmInterval);
-                bgmInterval = null;
-            }
-        }
-        // --------------------------------------------------------
+        // ----------------------------------------------------
 
         for(let i=0; i<15; i++) {
             const line = document.createElement("div");
@@ -233,13 +188,13 @@
         }
 
         window.addEventListener("keydown", (e) => { 
-            initAudio(); // キーを押したときにもオーディオを有効化
+            bgm.play().catch(()=>{}); 
             keys[e.key] = true; 
         });
         window.addEventListener("keyup", (e) => { keys[e.key] = false; });
 
         function updateTouchTarget(e) {
-            initAudio(); // 画面タッチ時にもオーディオを有効化
+            bgm.play().catch(()=>{}); 
             if (e.touches.length === 0 || currentStatus !== "playing") return;
             const touch = e.touches[0];
             const rect = stage.getBoundingClientRect();
@@ -252,12 +207,13 @@
         stage.addEventListener("touchmove", updateTouchTarget, { passive: true });
         stage.addEventListener("touchend", () => { touchTarget = null; }, { passive: true });
 
+        // 【スタートパスワード機能】
         document.getElementById("btn-start").addEventListener("click", () => {
-            initAudio();
+            bgm.play().catch(()=>{});
             if (currentStatus !== "waiting") return;
             
             const inputPass = prompt("管理用パスワードを入力してください：");
-            const CORRECT_PASSWORD = "1234";
+            const CORRECT_PASSWORD = "1234"; // 🔑 好きなパスワードに変えられます
 
             if (inputPass === CORRECT_PASSWORD) {
                 if (ws && ws.readyState === WebSocket.OPEN) { 
@@ -269,7 +225,7 @@
         });
 
         document.getElementById("btn-reset").addEventListener("click", () => {
-            initAudio();
+            bgm.play().catch(()=>{});
             if (ws && ws.readyState === WebSocket.OPEN) { ws.send(JSON.stringify({ type: "resetGame" })); }
         });
 
@@ -289,17 +245,16 @@
                             obstacles.forEach(b => b.element.remove()); obstacles = [];
                             lasers.forEach(l => l.element.remove()); lasers = [];
                             isInvincible = false;
-                            startBGM(110); // 待機中は少しゆっくりめのテンポ
+                            playExternalBGM("waiting"); 
                         } else if (currentStatus === "countdown") {
                             timerDisplay.innerText = "まもなく開始..."; overlay.style.display = "flex"; overlay.innerText = "READY..."; overlay.style.color = "#ff0";
-                            startBGM(130); // カウントダウンからテンポアップ
+                            playExternalBGM("countdown");
                         } else if (currentStatus === "playing") {
                             overlay.style.display = "none"; timerDisplay.innerText = "⏱ 残り時間: " + data.state.timeLeft + "秒";
-                            // 再生中でなければ激しい戦闘テンポで再生
-                            if(!bgmInterval || bgmBPM !== 160) startBGM(160); 
+                            playExternalBGM("playing"); 
                         } else if (currentStatus === "finished") {
                             overlay.style.display = "flex"; overlay.innerText = "⌛ TIME UP!\n👑 勝者: " + data.state.winner; overlay.style.color = "#0f0"; timerDisplay.innerText = "ゲーム終了！";
-                            stopBGM(); // 終了したらBGMを止める
+                            playExternalBGM("finished"); 
                         }
                     }
 
@@ -325,7 +280,7 @@
 
                     if (data.type === "init") { 
                         updateLeaderboard(data.players); 
-                        startBGM(110); // 初期起動時にBGM開始
+                        playExternalBGM("waiting");
                     }
 
                     if (data.type === "sync") {
@@ -454,9 +409,6 @@
             touchTarget = null;
             myDeaths += penaltyAmount; 
             bodyDiv.style.backgroundColor = "#f00"; 
-            
-            // 被弾時に一瞬だけ低音のSE（効果音）を鳴らす
-            playTone(80, 0.1);
 
             setTimeout(() => { 
                 bodyDiv.style.backgroundColor = myColor; 
