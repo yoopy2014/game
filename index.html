@@ -16,10 +16,8 @@
             align-items: center;
             justify-content: center;
             height: 100vh;
-            /* スマホで画面を引っ張った時のバウンス（スクロール）を防止 */
             touch-action: none; 
         }
-        /* ゲームのメインステージ */
         #game-stage {
             position: relative;
             width: 800px;
@@ -27,24 +25,20 @@
             border: 4px solid #fff;
             background-color: #000;
             overflow: hidden;
-            /* タブレットなどでタップした時の青いハイライトを消す */
             -webkit-tap-highlight-color: transparent; 
         }
-        /* スクロール感を出すための背景のライン */
         .bg-line {
             position: absolute;
             height: 2px;
             background-color: #333;
             width: 100px;
         }
-        /* プレイヤー（ソウル風の四角） */
         .player {
             position: absolute;
             width: 20px;
             height: 20px;
             z-index: 10;
         }
-        /* サンズの攻撃：骨 */
         .bone {
             position: absolute;
             width: 15px;
@@ -52,7 +46,6 @@
             border-radius: 4px;
             z-index: 5;
         }
-        /* サンズの攻撃：ブラスターのレーザー */
         .laser {
             position: absolute;
             left: 0;
@@ -69,17 +62,16 @@
 <body>
 
     <h1 style="font-size: 24px; margin-bottom: 10px;">3D/2D SANS SPEEDRUN</h1>
-    <p style="margin: 0 0 10px 0; color: #aaa; font-size: 14px;">PC: 矢印キー / WASD | スマホ: 画面スワイプで操作</p>
+    <p style="margin: 0 0 10px 0; color: #aaa; font-size: 14px;">PC: 矢印キー/WASD | スマホ: 画面タッチした場所へ移動</p>
     <div id="game-stage"></div>
 
     <script>
-        // 1. --- Cloudflare Workersへの接続情報 ---
         const WorkersURL = "game.yoopy2014.workers.dev"; 
 
-        // 2. --- ゲームの設定と状態 ---
         const myId = "player_" + Math.floor(Math.random() * 10000);
         const myColor = '#' + Math.floor(Math.random()*16777215).toString(16);
         let myPos = { x: 100, y: 190 };
+        let lastSentPos = { x: 0, y: 0 }; // 無駄な通信を減らすための前回の座標保持
         const SPEED = 6;
         const keys = {};
         const obstacles = [];
@@ -90,7 +82,10 @@
         
         const stage = document.getElementById("game-stage");
 
-        // --- 背景のライン生成 ---
+        // --- タッチ操作用のターゲット座標 ---
+        let touchTarget = null; // 指が触れているステージ内の座標（nullの時はタッチされてない）
+
+        // 背景のライン生成
         for(let i=0; i<15; i++) {
             const line = document.createElement("div");
             line.className = "bg-line";
@@ -100,45 +95,35 @@
             bgLines.push({ element: line, x: Math.random() * 800, speed: Math.random() * 4 + 2 });
         }
 
-        // --- 3. 操作イベントの登録（キーボード＆タッチ両対応） ---
+        // --- 操作イベント ---
         window.addEventListener("keydown", (e) => { keys[e.key] = true; });
         window.addEventListener("keyup", (e) => { keys[e.key] = false; });
 
-        // タッチ操作用の一時記憶変数
-        let touchStartX = 0;
-        let touchStartY = 0;
-
-        // 画面に指が触れた瞬間
-        stage.addEventListener("touchstart", (e) => {
-            const touch = e.touches[0];
-            touchStartX = touch.clientX;
-            touchStartY = touch.clientY;
-        }, { passive: true });
-
-        // 指を動かしている間（スワイプ）
-        stage.addEventListener("touchmove", (e) => {
+        // タッチ位置を計算してターゲット座標を更新する関数
+        function updateTouchTarget(e) {
             if (e.touches.length === 0) return;
             const touch = e.touches[0];
+            const rect = stage.getBoundingClientRect();
             
-            // 動いた距離（デルタ値）を計算
-            const deltaX = touch.clientX - touchStartX;
-            const deltaY = touch.clientY - touchStartY;
+            // ステージ内の基準座標に変換（ソウルの中心が指に集まるように-10調整）
+            touchTarget = {
+                x: (touch.clientX - rect.left) * (800 / rect.width) - 10,
+                y: (touch.clientY - rect.top) * (400 / rect.height) - 10
+            };
+        }
 
-            // ソウルの位置を直感的にスライドさせる
-            myPos.x += deltaX * 1.2; // 1.2倍して少しキビキビ動くように調整
-            myPos.y += deltaY * 1.2;
+        stage.addEventListener("touchstart", updateTouchTarget, { passive: true });
+        stage.addEventListener("touchmove", updateTouchTarget, { passive: true });
+        stage.addEventListener("touchend", () => { touchTarget = null; }, { passive: true });
 
-            // 今回の移動終わり位置を、次の基準点にする
-            touchStartX = touch.clientX;
-            touchStartY = touch.clientY;
-        }, { passive: true });
-
-
-        // --- 4. 通信サーバーとの接続（自動リトライ型） ---
+        // --- 通信サーバーとの接続（低遅延対策） ---
         function connectToWebSocket() {
             try {
                 if (ws) { ws.close(); }
                 ws = new WebSocket("wss://" + WorkersURL + "/ws");
+
+                // 送信バッファの詰まりを抑えるため、バイナリや不要なオーバーヘッドを減らす設定
+                ws.binaryType = "arraybuffer"; 
 
                 ws.onmessage = (event) => {
                     const data = JSON.parse(event.data);
@@ -157,7 +142,6 @@
                 };
 
                 ws.onclose = () => { setTimeout(connectToWebSocket, 1000); };
-                ws.onerror = () => {};
             } catch (e) {
                 setTimeout(connectToWebSocket, 1000);
             }
@@ -166,23 +150,34 @@
         connectToWebSocket();
         gameLoop();
 
-        // --- 5. メインゲームループ ---
+        // --- メインゲームループ ---
         function gameLoop() {
             gameTick++;
             let moved = false;
 
-            // キーボード側の移動処理
+            // ① キーボードによる移動
             if (keys["ArrowUp"] || keys["w"]) { myPos.y -= SPEED; moved = true; }
             if (keys["ArrowDown"] || keys["s"]) { myPos.y += SPEED; moved = true; }
             if (keys["ArrowLeft"] || keys["a"]) { myPos.x -= SPEED; moved = true; }
             if (keys["ArrowRight"] || keys["d"]) { myPos.x += SPEED; moved = true; }
 
-            // タッチ操作時は常に移動が発生しているとみなして同期をONにする
-            if (keys["ArrowUp"] || keys["w"] || keys["ArrowDown"] || keys["s"] || keys["ArrowLeft"] || keys["a"] || keys["ArrowRight"] || keys["d"]) {
-                moved = true;
-            } else {
-                // タッチ移動の滑らかさを保つため、ループ内では常に前回の位置と比較して動いていれば同期
-                moved = true; 
+            // ② スマホ：タッチ位置に向かって一定速度で追従するロジック（三角関数を使用）
+            if (touchTarget) {
+                const diffX = touchTarget.x - myPos.x;
+                const diffY = touchTarget.y - myPos.y;
+                const distance = Math.sqrt(diffX * diffX + diffY * diffY);
+
+                // 指の位置にほぼ到達している場合はピタッと止める（ガタツキ防止）
+                if (distance > SPEED) {
+                    // ベクトルの正規化を用いて、どの方向に対しても常に「SPEED」と同じ速度で進む
+                    myPos.x += (diffX / distance) * SPEED;
+                    myPos.y += (diffY / distance) * SPEED;
+                    moved = true;
+                } else {
+                    myPos.x = touchTarget.x;
+                    myPos.y = touchTarget.y;
+                    moved = true;
+                }
             }
 
             // 画面外ブレーキ
@@ -202,11 +197,16 @@
             myDiv.style.left = myPos.x + "px";
             myDiv.style.top = myPos.y + "px";
 
-            // 位置を全員に同期
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                try {
-                    ws.send(JSON.stringify({ type: "move", id: myId, color: myColor, x: myPos.x, y: myPos.y }));
-                } catch(e) {}
+            // ③ 【タイムラグ大幅削減対策】
+            // 座標に変化があった時、かつ前回の送信位置から1px以上動いている時だけパケットを飛ばす（通信の過密化・遅延を防ぐ）
+            if (moved && ws && ws.readyState === WebSocket.OPEN) {
+                if (Math.abs(myPos.x - lastSentPos.x) > 1 || Math.abs(myPos.y - lastSentPos.y) > 1) {
+                    try {
+                        ws.send(JSON.stringify({ type: "move", id: myId, color: myColor, x: Math.round(myPos.x), y: Math.round(myPos.y) }));
+                        lastSentPos.x = myPos.x;
+                        lastSentPos.y = myPos.y;
+                    } catch(e) {}
+                }
             }
 
             // 背景スクロール
@@ -216,13 +216,10 @@
                 line.element.style.left = line.x + "px";
             });
 
-            // タイムライン攻撃：骨
+            // 骨とレーザーの処理（変更なし）
             if (gameTick % 40 === 0) { createBone(); }
-
-            // タイムライン攻撃：レーザー
             if (gameTick % 120 === 0) { triggerLaser(); }
 
-            // 骨の移動と当たり判定
             obstacles.forEach((bone, index) => {
                 bone.x -= 5; 
                 bone.element.style.left = bone.x + "px";
@@ -233,7 +230,6 @@
                 if (bone.x < -20) { bone.element.remove(); obstacles.splice(index, 1); }
             });
 
-            // レーザーの当たり判定
             lasers.forEach((laser, index) => {
                 if (laser.isActive) {
                     if (myPos.y + 20 > laser.y && myPos.y < laser.y + laser.h) {
@@ -247,7 +243,6 @@
             requestAnimationFrame(gameLoop);
         }
 
-        // --- 骨の生成 ---
         function createBone() {
             const bone = document.createElement("div");
             bone.className = "bone";
@@ -261,7 +256,6 @@
             obstacles.push({ element: bone, x: 800, y: yPos, h: height });
         }
 
-        // --- レーザーの発射演出 ---
         function triggerLaser() {
             const laser = document.createElement("div");
             laser.className = "laser";
@@ -284,9 +278,9 @@
             }, 500);
         }
 
-        // --- ペナルティ処理 ---
         function hitPenalty(div) {
             myPos = { x: 100, y: 190 }; 
+            touchTarget = null; // タッチ中に当たったら一回ターゲットをクリアして指を離させる
             div.style.backgroundColor = "#f00"; 
             setTimeout(() => { div.style.backgroundColor = myColor; }, 200);
         }
