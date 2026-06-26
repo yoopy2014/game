@@ -18,14 +18,14 @@ const server = app.listen(PORT, () => {
 const wss = new WebSocketServer({ server });
 const clientSockets = new Set();
 
-// 全員のプレイヤーデータをサーバーで一元管理
 let players = {}; 
 let gameState = {
-    status: "waiting", // "waiting", "countdown", "playing", "finished"
+    status: "waiting", 
     timeLeft: 60,
     duration: 60
 };
-let timerInterval = null;
+let gameInterval = null;
+let serverTick = 0;
 
 function broadcast(data) {
     for (const socket of clientSockets) {
@@ -35,96 +35,93 @@ function broadcast(data) {
     }
 }
 
-function startTimer() {
-    clearInterval(timerInterval);
+function startGameSystem() {
+    clearInterval(gameInterval);
     gameState.status = "playing";
     gameState.timeLeft = gameState.duration;
+    serverTick = 0;
     
     broadcast({ type: "gameState", state: gameState });
 
-    timerInterval = setInterval(() => {
-        gameState.timeLeft--;
-        if (gameState.timeLeft <= 0) {
-            clearInterval(timerInterval);
-            gameState.status = "finished";
-            
-            // 勝者を判定（死亡回数が一番少ない人）
-            let winnerName = "なし";
-            let minDeaths = Infinity;
-            let pArray = Object.values(players);
-            
-            if (pArray.length > 0) {
-                pArray.forEach(p => {
-                    if (p.deaths < minDeaths) {
-                        minDeaths = p.deaths;
-                        winnerName = p.name;
-                    }
-                });
+    gameInterval = setInterval(() => {
+        serverTick++;
+
+        // 1秒ごとのタイマー減算処理 (60fps換算で約60回に1回、秒を減らす)
+        if (serverTick % 60 === 0) {
+            gameState.timeLeft--;
+            if (gameState.timeLeft <= 0) {
+                clearInterval(gameInterval);
+                gameState.status = "finished";
+                
+                let winnerName = "なし";
+                let minDeaths = Infinity;
+                let pArray = Object.values(players);
+                
+                if (pArray.length > 0) {
+                    pArray.forEach(p => {
+                        if (p.deaths < minDeaths) {
+                            minDeaths = p.deaths;
+                            winnerName = p.name;
+                        }
+                    });
+                }
+                gameState.winner = winnerName;
             }
-            gameState.winner = winnerName;
+            broadcast({ type: "gameState", state: gameState });
         }
-        broadcast({ type: "gameState", state: gameState });
-    }, 1000);
+
+        // 【★超重要】サーバー側で攻撃を完全に同期生成して全員に送る！
+        if (gameState.status === "playing") {
+            // 骨の生成（約0.6秒ごと）
+            if (serverTick % 40 === 0) {
+                const isTop = Math.random() > 0.5;
+                const height = Math.random() * 150 + 50;
+                broadcast({ type: "spawnBone", isTop: isTop, height: height });
+            }
+            // レーザーの生成（約2秒ごと）
+            if (serverTick % 120 === 0) {
+                const height = 60;
+                const yPos = Math.random() * (400 - height);
+                broadcast({ type: "spawnLaser", yPos: yPos, height: height });
+            }
+        }
+
+    }, 1000 / 60); // サーバーを秒間60フレームで超高速駆動
 }
 
 wss.on('connection', (ws) => {
     clientSockets.add(ws);
-    
-    // 新規接続時に現在のゲーム状態と全プレイヤーリストを送信
     ws.send(JSON.stringify({ type: "init", state: gameState, players: players }));
 
     ws.on('message', (message) => {
         try {
             const data = JSON.parse(message);
 
-            // ① 移動・名前・生死データを受け取って保存
             if (data.type === "move") {
                 players[data.id] = {
-                    id: data.id,
-                    name: data.name,
-                    color: data.color,
-                    x: data.x,
-                    y: data.y,
-                    deaths: data.deaths || 0
+                    id: data.id, name: data.name, color: data.color, x: data.x, y: data.y, deaths: data.deaths || 0
                 };
-                // 全員に最新のプレイヤー一覧をブロードキャスト
                 broadcast({ type: "sync", players: players });
             }
 
-            // ② ホストからのゲーム開始合図
             if (data.type === "startGame" && gameState.status === "waiting") {
                 gameState.status = "countdown";
-                gameState.duration = data.duration || 60;
                 broadcast({ type: "gameState", state: gameState });
-
-                // 3秒間のカウントダウン演出のあと、本戦スタート
-                setTimeout(() => {
-                    startTimer();
-                }, 3000);
+                setTimeout(() => { startGameSystem(); }, 3000);
             }
 
-            // ③ リセット合図
             if (data.type === "resetGame") {
-                clearInterval(timerInterval);
+                clearInterval(gameInterval);
                 gameState.status = "waiting";
                 gameState.timeLeft = 60;
                 if (gameState.winner) delete gameState.winner;
-                
-                // 全員のデス数をゼロにリセット
-                for (let id in players) {
-                    players[id].deaths = 0;
-                }
+                for (let id in players) { players[id].deaths = 0; }
                 broadcast({ type: "gameState", state: gameState });
                 broadcast({ type: "sync", players: players });
             }
-
         } catch (e) {}
     });
 
-    ws.on('close', () => {
-        clientSockets.delete(ws);
-        // 切断したプレイヤーをリストから削除する処理（任意。今回はID特定用に少し残すか、消すか）
-        // ここではシンプルに全員同期に任せます
-    });
+    ws.on('close', () => { clientSockets.delete(ws); });
     ws.on('error', () => { clientSockets.delete(ws); });
 });
