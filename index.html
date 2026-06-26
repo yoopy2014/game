@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>3D/2Dサンズ風・同期スクロールレース</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            background-color: #000; color: #fff; font-family: monospace;
+            margin: 0; padding: 10px; overflow: hidden;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; touch-action: none; 
+        }
+        h1 { font-size: 5vw; max-size: 24px; margin: 0 0 5px 0; text-align: center; }
+        p { margin: 0 0 10px 0; color: #aaa; font-size: 3vw; max-size: 14px; text-align: center; }
+        #game-stage {
+            position: relative; width: 95vw; max-width: 800px; aspect-ratio: 2 / 1;
+            border: 4px solid #fff; background-color: #000; overflow: hidden; -webkit-tap-highlight-color: transparent; 
+        }
+        .bg-line { position: absolute; height: 2px; background-color: #333; width: 100px; }
+        .player-container { position: absolute; width: 20px; height: 20px; z-index: 10; display: flex; flex-direction: column; align-items: center; }
+        .player-body { width: 20px; height: 20px; }
+        .player-name { position: absolute; bottom: 24px; white-space: nowrap; font-size: 12px; color: #fff; background-color: rgba(0, 0, 0, 0.7); padding: 2px 6px; border-radius: 3px; border: 1px solid #555; }
+        .other-player { opacity: 0.6; }
+        .bone { position: absolute; width: 15px; background-color: #fff; border-radius: 4px; z-index: 5; }
+        .laser { position: absolute; left: 0; width: 800px; background-color: #fff; border-top: 4px solid #00f; border-bottom: 4px solid #f00; z-index: 6; opacity: 0; transition: opacity 0.1s; }
+    </style>
+</head>
+<body>
+
+    <h1>3D/2D SANS SPEEDRUN</h1>
+    <p>PC: 矢印キー/WASD | スマホ: 画面タッチした場所へ移動</p>
+    <div id="game-stage"></div>
+
+    <script>
+        let myName = prompt("あなたの名前を入力してください：", "ゲスト");
+        if (!myName || myName.trim() === "") { myName = "ゲスト"; }
+
+        // 【★超重要】自分の開いているドメイン（Render）を自動検出して、通信先を自動決定！
+        const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+        const wsUrl = protocol + window.location.host;
+
+        const myId = "player_" + Math.floor(Math.random() * 10000);
+        const myColor = '#' + Math.floor(Math.random()*16777215).toString(16);
+        let myPos = { x: 100, y: 190 };
+        let lastSentPos = { x: 0, y: 0 }; 
+        const SPEED = 6;
+        const keys = {};
+        const obstacles = [];
+        const bgLines = [];
+        let lasers = []; 
+        let gameTick = 0;
+        let ws = null; 
+        
+        const stage = document.getElementById("game-stage");
+        let touchTarget = null; 
+
+        for(let i=0; i<15; i++) {
+            const line = document.createElement("div");
+            line.className = "bg-line";
+            line.style.left = Math.random() * 800 + "px";
+            line.style.top = Math.random() * 400 + "px";
+            stage.appendChild(line);
+            bgLines.push({ element: line, x: Math.random() * 800, speed: Math.random() * 4 + 2 });
+        }
+
+        window.addEventListener("keydown", (e) => { keys[e.key] = true; });
+        window.addEventListener("keyup", (e) => { keys[e.key] = false; });
+
+        function updateTouchTarget(e) {
+            if (e.touches.length === 0) return;
+            const touch = e.touches[0];
+            const rect = stage.getBoundingClientRect();
+            touchTarget = {
+                x: (touch.clientX - rect.left) * (800 / rect.width) - 10,
+                y: (touch.clientY - rect.top) * (400 / rect.height) - 10
+            };
+        }
+        stage.addEventListener("touchstart", updateTouchTarget, { passive: true });
+        stage.addEventListener("touchmove", updateTouchTarget, { passive: true });
+        stage.addEventListener("touchend", () => { touchTarget = null; }, { passive: true });
+
+        function connectToWebSocket() {
+            try {
+                if (ws) { ws.close(); }
+                ws = new WebSocket(wsUrl); // 自動決定したURLに接続
+                ws.binaryType = "arraybuffer"; 
+
+                ws.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    if (data.type === "move" && data.id !== myId) {
+                        let pContainer = document.getElementById(data.id);
+                        if (!pContainer) {
+                            pContainer = document.createElement("div");
+                            pContainer.id = data.id;
+                            pContainer.className = "player-container other-player";
+                            const nDiv = document.createElement("div");
+                            nDiv.className = "player-name";
+                            nDiv.innerText = data.name;
+                            pContainer.appendChild(nDiv);
+                            const bDiv = document.createElement("div");
+                            bDiv.className = "player-body";
+                            bDiv.style.backgroundColor = data.color;
+                            pContainer.appendChild(bDiv);
+                            stage.appendChild(pContainer);
+                        }
+                        pContainer.style.left = data.x + "px";
+                        pContainer.style.top = data.y + "px";
+                    }
+                };
+                ws.onclose = () => { setTimeout(connectToWebSocket, 1000); };
+            } catch (e) {
+                setTimeout(connectToWebSocket, 1000);
+            }
+        }
+
+        connectToWebSocket();
+        gameLoop();
+
+        function gameLoop() {
+            gameTick++;
+            let moved = false;
+
+            if (keys["ArrowUp"] || keys["w"]) { myPos.y -= SPEED; moved = true; }
+            if (keys["ArrowDown"] || keys["s"]) { myPos.y += SPEED; moved = true; }
+            if (keys["ArrowLeft"] || keys["a"]) { myPos.x -= SPEED; moved = true; }
+            if (keys["ArrowRight"] || keys["d"]) { myPos.x += SPEED; moved = true; }
+
+            if (touchTarget) {
+                const diffX = touchTarget.x - myPos.x;
+                const diffY = touchTarget.y - myPos.y;
+                const distance = Math.sqrt(diffX * diffX + diffY * diffY);
+                if (distance > SPEED) {
+                    myPos.x += (diffX / distance) * SPEED;
+                    myPos.y += (diffY / distance) * SPEED;
+                    moved = true;
+                } else {
+                    myPos.x = touchTarget.x; myPos.y = touchTarget.y; moved = true;
+                }
+            }
+
+            if (myPos.x < 0) myPos.x = 0; if (myPos.x > 780) myPos.x = 780;
+            if (myPos.y < 0) myPos.y = 0; if (myPos.y > 380) myPos.y = 380;
+
+            let myContainer = document.getElementById(myId);
+            if (!myContainer) {
+                myContainer = document.createElement("div");
+                myContainer.id = myId;
+                myContainer.className = "player-container";
+                const nDiv = document.createElement("div");
+                nDiv.className = "player-name";
+                nDiv.innerText = myName;
+                myContainer.appendChild(nDiv);
+                const bDiv = document.createElement("div");
+                bDiv.className = "player-body";
+                bDiv.style.backgroundColor = myColor;
+                bDiv.style.border = "2px solid #fff"; 
+                myContainer.appendChild(bDiv);
+                stage.appendChild(myContainer);
+            }
+            myContainer.style.left = myPos.x + "px";
+            myContainer.style.top = myPos.y + "px";
+
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                if (Math.abs(myPos.x - lastSentPos.x) > 1 || Math.abs(myPos.y - lastSentPos.y) > 1 || gameTick % 60 === 0) {
+                    try {
+                        ws.send(JSON.stringify({ 
+                            type: "move", id: myId, name: myName, color: myColor, x: Math.round(myPos.x), y: Math.round(myPos.y) 
+                        }));
+                        lastSentPos.x = myPos.x; lastSentPos.y = myPos.y;
+                    } catch(e) {}
+                }
+            }
+
+            bgLines.forEach(line => {
+                line.x -= line.speed;
+                if (line.x < -100) { line.x = 800; line.element.style.top = Math.random() * 400 + "px"; }
+                line.element.style.left = line.x + "px";
+            });
+
+            if (gameTick % 40 === 0) { createBone(); }
+            if (gameTick % 120 === 0) { triggerLaser(); }
+
+            obstacles.forEach((bone, index) => {
+                bone.x -= 5; 
+                bone.element.style.left = bone.x + "px";
+                if (bone.x < myPos.x + 20 && bone.x + 15 > myPos.x && bone.y < myPos.y + 20 && bone.y + bone.h > myPos.y) {
+                    hitPenalty(myContainer.querySelector(".player-body"));
+                }
+                if (bone.x < -20) { bone.element.remove(); obstacles.splice(index, 1); }
+            });
+
+            lasers.forEach((laser, index) => {
+                if (laser.isActive) {
+                    if (myPos.y + 20 > laser.y && myPos.y < laser.y + laser.h) { hitPenalty(myContainer.querySelector(".player-body")); }
+                }
+                laser.life--;
+                if (laser.life <= 0) { laser.element.remove(); lasers.splice(index, 1); }
+            });
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function createBone() {
+            const bone = document.createElement("div");
+            bone.className = "bone";
+            const isTop = Math.random() > 0.5;
+            const height = Math.random() * 150 + 50; 
+            const yPos = isTop ? 0 : (400 - height);
+            bone.style.height = height + "px"; bone.style.top = yPos + "px"; bone.style.left = "800px";
+            stage.appendChild(bone);
+            obstacles.push({ element: bone, x: 800, y: yPos, h: height });
+        }
+
+        function triggerLaser() {
+            const laser = document.createElement("div");
+            laser.className = "laser";
+            const height = 60; const yPos = Math.random() * (400 - height); 
+            laser.style.height = height + "px"; laser.style.top = yPos + "px";
+            stage.appendChild(laser);
+            const laserObj = { element: laser, y: yPos, h: height, isActive: false, life: 45 }; 
+            lasers.push(laserObj);
+            laser.style.opacity = "0.2"; laser.style.backgroundColor = "#f00";
+            setTimeout(() => { laserObj.isActive = true; laser.style.opacity = "1"; laser.style.backgroundColor = "#fff"; }, 500);
+        }
+
+        function hitPenalty(bodyDiv) {
+            myPos = { x: 100, y: 190 }; touchTarget = null;
+            bodyDiv.style.backgroundColor = "#f00"; 
+            setTimeout(() => { bodyDiv.style.backgroundColor = myColor; }, 200);
+        }
+    </script>
+</body>
+</html>
