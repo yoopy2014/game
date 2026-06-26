@@ -46,7 +46,6 @@ function startGameSystem() {
     gameInterval = setInterval(() => {
         serverTick++;
 
-        // 1秒ごとのタイマー減算処理 (60fps換算で約60回に1回、秒を減らす)
         if (serverTick % 60 === 0) {
             gameState.timeLeft--;
             if (gameState.timeLeft <= 0) {
@@ -70,15 +69,12 @@ function startGameSystem() {
             broadcast({ type: "gameState", state: gameState });
         }
 
-        // 【★超重要】サーバー側で攻撃を完全に同期生成して全員に送る！
         if (gameState.status === "playing") {
-            // 骨の生成（約0.6秒ごと）
             if (serverTick % 40 === 0) {
                 const isTop = Math.random() > 0.5;
                 const height = Math.random() * 150 + 50;
                 broadcast({ type: "spawnBone", isTop: isTop, height: height });
             }
-            // レーザーの生成（約2秒ごと）
             if (serverTick % 120 === 0) {
                 const height = 60;
                 const yPos = Math.random() * (400 - height);
@@ -86,11 +82,15 @@ function startGameSystem() {
             }
         }
 
-    }, 1000 / 60); // サーバーを秒間60フレームで超高速駆動
+    }, 1000 / 60); 
 }
 
 wss.on('connection', (ws) => {
     clientSockets.add(ws);
+    
+    // この接続（ws）がどのプレイヤーIDのものかを紐付けるための変数
+    let myPlayerId = null;
+
     ws.send(JSON.stringify({ type: "init", state: gameState, players: players }));
 
     ws.on('message', (message) => {
@@ -98,6 +98,10 @@ wss.on('connection', (ws) => {
             const data = JSON.parse(message);
 
             if (data.type === "move") {
+                // 初回移動時にIDを記録しておく
+                if (!myPlayerId) {
+                    myPlayerId = data.id;
+                }
                 players[data.id] = {
                     id: data.id, name: data.name, color: data.color, x: data.x, y: data.y, deaths: data.deaths || 0
                 };
@@ -122,6 +126,18 @@ wss.on('connection', (ws) => {
         } catch (e) {}
     });
 
-    ws.on('close', () => { clientSockets.delete(ws); });
-    ws.on('error', () => { clientSockets.delete(ws); });
+    // 【★修正】タブが閉じられた、または切断されたときの処理
+    const handleDisconnect = () => {
+        clientSockets.delete(ws);
+        
+        // 切断したプレイヤーのデータをリストから完全に消す
+        if (myPlayerId && players[myPlayerId]) {
+            delete players[myPlayerId];
+            // 削除した最新のプレイヤーリストを全員に即時同期
+            broadcast({ type: "sync", players: players });
+        }
+    };
+
+    ws.on('close', handleDisconnect);
+    ws.on('error', handleDisconnect);
 });
