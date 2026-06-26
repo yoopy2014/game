@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>3D/2Dサンズ風・同期リーダーボードデスマッチ</title>
+    <title>3D/2Dサンズ風・完全公平デスマッチ</title>
     <style>
         * { box-sizing: border-box; }
         body {
@@ -12,49 +12,16 @@
             display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; touch-action: none; 
         }
         
-        /* 全体レイアウトのコンテナ（横並びにする） */
-        .game-wrapper {
-            display: flex;
-            flex-direction: row;
-            gap: 15px;
-            width: 95vw;
-            max-width: 1050px;
-            aspect-ratio: 2.6 / 1;
-        }
-
-        /* 左側：ゲーム画面 */
-        #game-area {
-            flex: 2;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        #game-stage {
-            position: relative; width: 100%; aspect-ratio: 2 / 1;
-            border: 4px solid #fff; background-color: #000; overflow: hidden; -webkit-tap-highlight-color: transparent; 
-        }
-
-        /* 右側：リーダーボード */
-        #leaderboard {
-            flex: 0.6;
-            border: 4px solid #fff;
-            background-color: #111;
-            padding: 10px;
-            display: flex;
-            flex-direction: column;
-        }
+        .game-wrapper { display: flex; flex-direction: row; gap: 15px; width: 95vw; max-width: 1050px; aspect-ratio: 2.6 / 1; }
+        #game-area { flex: 2; display: flex; flex-direction: column; align-items: center; }
+        #game-stage { position: relative; width: 100%; aspect-ratio: 2 / 1; border: 4px solid #fff; background-color: #000; overflow: hidden; -webkit-tap-highlight-color: transparent; }
+        #leaderboard { flex: 0.6; border: 4px solid #fff; background-color: #111; padding: 10px; display: flex; flex-direction: column; }
         #leaderboard h2 { font-size: 18px; margin: 0 0 10px 0; border-bottom: 2px solid #fff; padding-bottom: 5px; text-align: center; }
-        .rank-item {
-            display: flex; justify-content: space-between; padding: 6px; margin-bottom: 5px; background: #222; font-size: 14px; border-radius: 4px;
-        }
-
-        /* 各種UIパーツ */
+        .rank-item { display: flex; justify-content: space-between; padding: 6px; margin-bottom: 5px; background: #222; font-size: 14px; border-radius: 4px; }
         #timer-display { font-size: 24px; font-weight: bold; margin-bottom: 5px; color: #ff0; text-align: center; }
         #control-panel { margin-bottom: 10px; display: flex; gap: 10px; }
         button { background: #fff; color: #000; border: none; padding: 6px 15px; font-weight: bold; cursor: pointer; font-family: monospace; }
         button:hover { background: #ccc; }
-
         .bg-line { position: absolute; height: 2px; background-color: #333; width: 100px; }
         .player-container { position: absolute; width: 20px; height: 20px; z-index: 10; display: flex; flex-direction: column; align-items: center; }
         .player-body { width: 20px; height: 20px; }
@@ -62,19 +29,8 @@
         .other-player { opacity: 0.6; }
         .bone { position: absolute; width: 15px; background-color: #fff; border-radius: 4px; z-index: 5; }
         .laser { position: absolute; left: 0; width: 800px; background-color: #fff; border-top: 4px solid #00f; border-bottom: 4px solid #f00; z-index: 6; opacity: 0; transition: opacity 0.1s; }
-        
-        /* 特殊画面オーバーレイ */
-        #overlay {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.8); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center;
-            font-size: 32px; font-weight: bold; text-align: center;
-        }
-
-        /* スマホ縦画面の時は横並びを解除するレスポンシブ対応 */
-        @media (max-width: 600px) {
-            .game-wrapper { flex-direction: column; aspect-ratio: auto; height: auto; }
-            #leaderboard { width: 100%; }
-        }
+        #overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 32px; font-weight: bold; text-align: center; }
+        @media (max-width: 600px) { .game-wrapper { flex-direction: column; aspect-ratio: auto; height: auto; } #leaderboard { width: 100%; } }
     </style>
 </head>
 <body>
@@ -90,11 +46,9 @@
                 <div id="overlay">名前を入力してください</div>
             </div>
         </div>
-
         <div id="leaderboard">
             <h2>🏆 RANKING</h2>
-            <div id="rank-list">
-                </div>
+            <div id="rank-list"></div>
         </div>
     </div>
 
@@ -110,7 +64,7 @@
         const myColor = '#' + Math.floor(Math.random()*16777215).toString(16);
         let myPos = { x: 100, y: 190 };
         let lastSentPos = { x: 0, y: 0 }; 
-        let myDeaths = 0; // 【★新機能】自分の死亡回数カウンター
+        let myDeaths = 0; 
         
         const SPEED = 6;
         const keys = {};
@@ -126,12 +80,10 @@
         const overlay = document.getElementById("overlay");
         let touchTarget = null; 
 
-        // 背景のライン生成
         for(let i=0; i<15; i++) {
             const line = document.createElement("div");
             line.className = "bg-line";
-            line.style.left = Math.random() * 800 + "px";
-            line.style.top = Math.random() * 400 + "px";
+            line.style.left = Math.random() * 800 + "px"; line.style.top = Math.random() * 400 + "px";
             stage.appendChild(line);
             bgLines.push({ element: line, x: Math.random() * 800, speed: Math.random() * 4 + 2 });
         }
@@ -152,16 +104,11 @@
         stage.addEventListener("touchmove", updateTouchTarget, { passive: true });
         stage.addEventListener("touchend", () => { touchTarget = null; }, { passive: true });
 
-        // ホスト操作ボタンのイベント登録
         document.getElementById("btn-start").addEventListener("click", () => {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: "startGame", duration: 60 }));
-            }
+            if (ws && ws.readyState === WebSocket.OPEN) { ws.send(JSON.stringify({ type: "startGame" })); }
         });
         document.getElementById("btn-reset").addEventListener("click", () => {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: "resetGame" }));
-            }
+            if (ws && ws.readyState === WebSocket.OPEN) { ws.send(JSON.stringify({ type: "resetGame" })); }
         });
 
         function connectToWebSocket() {
@@ -173,86 +120,78 @@
                 ws.onmessage = (event) => {
                     const data = JSON.parse(event.data);
                     
-                    // ゲームステート（タイマーや状態）の同期
                     if (data.type === "gameState") {
                         currentStatus = data.state.status;
                         if (currentStatus === "waiting") {
-                            timerDisplay.innerText = "待機中...";
-                            overlay.style.display = "none";
-                            myDeaths = 0; // デス数初期化
+                            timerDisplay.innerText = "待機中..."; overlay.style.display = "none"; myDeaths = 0;
+                            // 画面上の残ったオブジェクトを消去
+                            obstacles.forEach(b => b.element.remove()); obstacles = [];
+                            lasers.forEach(l => l.element.remove()); lasers = [];
                         } else if (currentStatus === "countdown") {
-                            timerDisplay.innerText = "まもなく開始...";
-                            overlay.style.display = "flex";
-                            overlay.innerText = "READY...";
-                            overlay.style.color = "#ff0";
+                            timerDisplay.innerText = "まもなく開始..."; overlay.style.display = "flex"; overlay.innerText = "READY..."; overlay.style.color = "#ff0";
                         } else if (currentStatus === "playing") {
-                            overlay.style.display = "none";
-                            timerDisplay.innerText = "⏱ 残り時間: " + data.state.timeLeft + "秒";
+                            overlay.style.display = "none"; timerDisplay.innerText = "⏱ 残り時間: " + data.state.timeLeft + "秒";
                         } else if (currentStatus === "finished") {
-                            overlay.style.display = "flex";
-                            overlay.innerText = "⌛ TIME UP!\n👑 勝者: " + data.state.winner;
-                            overlay.style.color = "#0f0";
-                            timerDisplay.innerText = "ゲーム終了！";
+                            overlay.style.display = "flex"; overlay.innerText = "⌛ TIME UP!\n👑 勝者: " + data.state.winner; overlay.style.color = "#0f0"; timerDisplay.innerText = "ゲーム終了！";
                         }
                     }
 
-                    // 初期データ受信時
-                    if (data.type === "init") {
-                        updateLeaderboard(data.players);
+                    // 【★新機能】サーバーからの骨発生の合図を受け取る
+                    if (data.type === "spawnBone") {
+                        const bone = document.createElement("div");
+                        bone.className = "bone";
+                        const yPos = data.isTop ? 0 : (400 - data.height);
+                        bone.style.height = data.height + "px"; bone.style.top = yPos + "px"; bone.style.left = "800px";
+                        stage.appendChild(bone);
+                        obstacles.push({ element: bone, x: 800, y: yPos, h: data.height });
                     }
 
-                    // 全プレイヤーの同期＆ランキング更新
+                    // 【★新機能】サーバーからのレーザー発生の合図を受け取る
+                    if (data.type === "spawnLaser") {
+                        const laser = document.createElement("div");
+                        laser.className = "laser";
+                        laser.style.height = data.height + "px"; laser.style.top = data.yPos + "px";
+                        stage.appendChild(laser);
+                        const laserObj = { element: laser, y: data.yPos, h: data.height, isActive: false, life: 45 };
+                        lasers.push(laserObj);
+                        laser.style.opacity = "0.2"; laser.style.backgroundColor = "#f00";
+                        setTimeout(() => { laserObj.isActive = true; laser.style.opacity = "1"; laser.style.backgroundColor = "#fff"; }, 500);
+                    }
+
+                    if (data.type === "init") { updateLeaderboard(data.players); }
+
                     if (data.type === "sync") {
                         updateLeaderboard(data.players);
-                        
-                        // 自分以外のプレイヤー位置描画
                         for (let id in data.players) {
                             if (id === myId) continue;
                             const pData = data.players[id];
                             let pContainer = document.getElementById(id);
                             if (!pContainer) {
-                                pContainer = document.createElement("div");
-                                pContainer.id = id;
-                                pContainer.className = "player-container other-player";
-                                const nDiv = document.createElement("div");
-                                nDiv.className = "player-name";
-                                pContainer.appendChild(nDiv);
-                                const bDiv = document.createElement("div");
-                                bDiv.className = "player-body";
-                                pContainer.appendChild(bDiv);
+                                pContainer = document.createElement("div"); pContainer.id = id; pContainer.className = "player-container other-player";
+                                const nDiv = document.createElement("div"); nDiv.className = "player-name"; pContainer.appendChild(nDiv);
+                                const bDiv = document.createElement("div"); bDiv.className = "player-body"; pContainer.appendChild(bDiv);
                                 stage.appendChild(pContainer);
                             }
                             pContainer.querySelector(".player-name").innerText = pData.name + " (" + pData.deaths + "💀)";
                             pContainer.querySelector(".player-body").style.backgroundColor = pData.color;
-                            pContainer.style.left = pData.x + "px";
-                            pContainer.style.top = pData.y + "px";
+                            pContainer.style.left = pData.x + "px"; pContainer.style.top = pData.y + "px";
                         }
-
-                        // 退出したプレイヤーの要素を削除
                         const containers = stage.querySelectorAll(".other-player");
-                        containers.forEach(c => {
-                            if (!data.players[c.id]) { c.remove(); }
-                        });
+                        containers.forEach(c => { if (!data.players[c.id]) { c.remove(); } });
                     }
                 };
                 ws.onclose = () => { setTimeout(connectToWebSocket, 1000); };
-            } catch (e) {
-                setTimeout(connectToWebSocket, 1000);
-            }
+            } catch (e) { setTimeout(connectToWebSocket, 1000); }
         }
 
-        // ランキングボードの表示更新
         function updateLeaderboard(players) {
             const rankList = document.getElementById("rank-list");
             rankList.innerHTML = "";
-            
-            // オブジェクトを配列にして、死亡回数が「少ない順（昇順）」にソート
             let sorted = Object.values(players).sort((a, b) => a.deaths - b.deaths);
-            
             sorted.forEach((p, index) => {
                 const item = document.createElement("div");
                 item.className = "rank-item";
-                if(p.id === myId) item.style.border = "1px solid #fff"; // 自分を分かりやすく
+                if(p.id === myId) item.style.border = "1px solid #fff";
                 item.innerHTML = `<span>${index + 1}位: ${p.name}</span> <span>${p.deaths} 💀</span>`;
                 rankList.appendChild(item);
             });
@@ -265,7 +204,6 @@
             gameTick++;
             let moved = false;
 
-            // ゲーム中のときだけ動かせる
             if (currentStatus === "playing") {
                 if (keys["ArrowUp"] || keys["w"]) { myPos.y -= SPEED; moved = true; }
                 if (keys["ArrowDown"] || keys["s"]) { myPos.y += SPEED; moved = true; }
@@ -273,43 +211,29 @@
                 if (keys["ArrowRight"] || keys["d"]) { myPos.x += SPEED; moved = true; }
 
                 if (touchTarget) {
-                    const diffX = touchTarget.x - myPos.x;
-                    const diffY = touchTarget.y - myPos.y;
+                    const diffX = touchTarget.x - myPos.x; const diffY = touchTarget.y - myPos.y;
                     const distance = Math.sqrt(diffX * diffX + diffY * diffY);
                     if (distance > SPEED) {
-                        myPos.x += (diffX / distance) * SPEED;
-                        myPos.y += (diffY / distance) * SPEED;
-                        moved = true;
+                        myPos.x += (diffX / distance) * SPEED; myPos.y += (diffY / distance) * SPEED; moved = true;
                     } else {
                         myPos.x = touchTarget.x; myPos.y = touchTarget.y; moved = true;
                     }
                 }
-
                 if (myPos.x < 0) myPos.x = 0; if (myPos.x > 780) myPos.x = 780;
                 if (myPos.y < 0) myPos.y = 0; if (myPos.y > 380) myPos.y = 380;
             }
 
-            // 自分の描画
             let myContainer = document.getElementById(myId);
             if (!myContainer) {
-                myContainer = document.createElement("div");
-                myContainer.id = myId;
-                myContainer.className = "player-container";
-                const nDiv = document.createElement("div");
-                nDiv.className = "player-name";
-                myContainer.appendChild(nDiv);
-                const bDiv = document.createElement("div");
-                bDiv.className = "player-body";
-                bDiv.style.border = "2px solid #fff"; 
-                myContainer.appendChild(bDiv);
+                myContainer = document.createElement("div"); myContainer.id = myId; myContainer.className = "player-container";
+                const nDiv = document.createElement("div"); nDiv.className = "player-name"; myContainer.appendChild(nDiv);
+                const bDiv = document.createElement("div"); bDiv.className = "player-body"; bDiv.style.border = "2px solid #fff"; myContainer.appendChild(bDiv);
                 stage.appendChild(myContainer);
             }
             myContainer.querySelector(".player-name").innerText = myName + " (" + myDeaths + "💀)";
             myContainer.querySelector(".player-body").style.backgroundColor = myColor;
-            myContainer.style.left = myPos.x + "px";
-            myContainer.style.top = myPos.y + "px";
+            myContainer.style.left = myPos.x + "px"; myContainer.style.top = myPos.y + "px";
 
-            // 位置と【★デス数】をサーバーへ同期送信
             if (ws && ws.readyState === WebSocket.OPEN) {
                 if (moved || gameTick % 30 === 0) {
                     try {
@@ -321,33 +245,28 @@
                 }
             }
 
-            // 背景スクロール
             bgLines.forEach(line => {
                 line.x -= line.speed;
                 if (line.x < -100) { line.x = 800; line.element.style.top = Math.random() * 400 + "px"; }
                 line.element.style.left = line.x + "px";
             });
 
-            // 攻撃の発生（ゲーム中だけ生成する）
-            if (currentStatus === "playing") {
-                if (gameTick % 40 === 0) { createBone(); }
-                if (gameTick % 120 === 0) { triggerLaser(); }
-            }
-
-            // 骨の移動と当たり判定
+            // 骨の移動と当たり判定（当たると1点加算）
             obstacles.forEach((bone, index) => {
                 bone.x -= 5; 
                 bone.element.style.left = bone.x + "px";
                 if (currentStatus === "playing" && bone.x < myPos.x + 20 && bone.x + 15 > myPos.x && bone.y < myPos.y + 20 && bone.y + bone.h > myPos.y) {
-                    hitPenalty(myContainer.querySelector(".player-body"));
+                    hitPenalty(myContainer.querySelector(".player-body"), 1);
                 }
                 if (bone.x < -20) { bone.element.remove(); obstacles.splice(index, 1); }
             });
 
-            // レーザーの当たり判定
+            // レーザーの当たり判定（当たると15点加算）
             lasers.forEach((laser, index) => {
                 if (laser.isActive && currentStatus === "playing") {
-                    if (myPos.y + 20 > laser.y && myPos.y < laser.y + laser.h) { hitPenalty(myContainer.querySelector(".player-body")); }
+                    if (myPos.y + 20 > laser.y && myPos.y < laser.y + laser.h) { 
+                        hitPenalty(myContainer.querySelector(".player-body"), 15); 
+                    }
                 }
                 laser.life--;
                 if (laser.life <= 0) { laser.element.remove(); lasers.splice(index, 1); }
@@ -356,34 +275,10 @@
             requestAnimationFrame(gameLoop);
         }
 
-        function createBone() {
-            const bone = document.createElement("div");
-            bone.className = "bone";
-            const isTop = Math.random() > 0.5;
-            const height = Math.random() * 150 + 50; 
-            const yPos = isTop ? 0 : (400 - height);
-            bone.style.height = height + "px"; bone.style.top = yPos + "px"; bone.style.left = "800px";
-            stage.appendChild(bone);
-            obstacles.push({ element: bone, x: 800, y: yPos, h: height });
-        }
-
-        function triggerLaser() {
-            const laser = document.createElement("div");
-            laser.className = "laser";
-            const height = 60; const yPos = Math.random() * (400 - height); 
-            laser.style.height = height + "px"; laser.style.top = yPos + "px";
-            stage.appendChild(laser);
-            const laserObj = { element: laser, y: yPos, h: height, isActive: false, life: 45 }; 
-            lasers.push(laserObj);
-            laser.style.opacity = "0.2"; laser.style.backgroundColor = "#f00";
-            setTimeout(() => { laserObj.isActive = true; laser.style.opacity = "1"; laser.style.backgroundColor = "#fff"; }, 500);
-        }
-
-        // 【★新機能】当たったときの処理（死亡回数をプラス！）
-        function hitPenalty(bodyDiv) {
+        function hitPenalty(bodyDiv, penaltyAmount) {
             myPos = { x: 100, y: 190 }; 
             touchTarget = null;
-            myDeaths++; // デス数を1増やす！
+            myDeaths += penaltyAmount; 
             bodyDiv.style.backgroundColor = "#f00"; 
             setTimeout(() => { bodyDiv.style.backgroundColor = myColor; }, 200);
         }
