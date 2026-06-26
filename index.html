@@ -2,6 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>3D/2Dサンズ風・同期スクロールレース</title>
     <style>
         body {
@@ -15,6 +16,8 @@
             align-items: center;
             justify-content: center;
             height: 100vh;
+            /* スマホで画面を引っ張った時のバウンス（スクロール）を防止 */
+            touch-action: none; 
         }
         /* ゲームのメインステージ */
         #game-stage {
@@ -24,6 +27,8 @@
             border: 4px solid #fff;
             background-color: #000;
             overflow: hidden;
+            /* タブレットなどでタップした時の青いハイライトを消す */
+            -webkit-tap-highlight-color: transparent; 
         }
         /* スクロール感を出すための背景のライン */
         .bg-line {
@@ -63,7 +68,8 @@
 </head>
 <body>
 
-    <h1>3D/2D SANS SPEEDRUN</h1>
+    <h1 style="font-size: 24px; margin-bottom: 10px;">3D/2D SANS SPEEDRUN</h1>
+    <p style="margin: 0 0 10px 0; color: #aaa; font-size: 14px;">PC: 矢印キー / WASD | スマホ: 画面スワイプで操作</p>
     <div id="game-stage"></div>
 
     <script>
@@ -82,7 +88,6 @@
         let gameTick = 0;
         let ws = null; 
         
-        // 即座にステージ要素を取得
         const stage = document.getElementById("game-stage");
 
         // --- 背景のライン生成 ---
@@ -95,11 +100,41 @@
             bgLines.push({ element: line, x: Math.random() * 800, speed: Math.random() * 4 + 2 });
         }
 
-        // キーボード入力の監視
+        // --- 3. 操作イベントの登録（キーボード＆タッチ両対応） ---
         window.addEventListener("keydown", (e) => { keys[e.key] = true; });
         window.addEventListener("keyup", (e) => { keys[e.key] = false; });
 
-        // --- 3. 通信サーバーとの接続（自動リトライ型） ---
+        // タッチ操作用の一時記憶変数
+        let touchStartX = 0;
+        let touchStartY = 0;
+
+        // 画面に指が触れた瞬間
+        stage.addEventListener("touchstart", (e) => {
+            const touch = e.touches[0];
+            touchStartX = touch.clientX;
+            touchStartY = touch.clientY;
+        }, { passive: true });
+
+        // 指を動かしている間（スワイプ）
+        stage.addEventListener("touchmove", (e) => {
+            if (e.touches.length === 0) return;
+            const touch = e.touches[0];
+            
+            // 動いた距離（デルタ値）を計算
+            const deltaX = touch.clientX - touchStartX;
+            const deltaY = touch.clientY - touchStartY;
+
+            // ソウルの位置を直感的にスライドさせる
+            myPos.x += deltaX * 1.2; // 1.2倍して少しキビキビ動くように調整
+            myPos.y += deltaY * 1.2;
+
+            // 今回の移動終わり位置を、次の基準点にする
+            touchStartX = touch.clientX;
+            touchStartY = touch.clientY;
+        }, { passive: true });
+
+
+        // --- 4. 通信サーバーとの接続（自動リトライ型） ---
         function connectToWebSocket() {
             try {
                 if (ws) { ws.close(); }
@@ -128,20 +163,27 @@
             }
         }
 
-        // 即座に通信とループをスタート
         connectToWebSocket();
         gameLoop();
 
-        // --- 4. メインゲームループ ---
+        // --- 5. メインゲームループ ---
         function gameLoop() {
             gameTick++;
             let moved = false;
 
-            // プレイヤーの移動
+            // キーボード側の移動処理
             if (keys["ArrowUp"] || keys["w"]) { myPos.y -= SPEED; moved = true; }
             if (keys["ArrowDown"] || keys["s"]) { myPos.y += SPEED; moved = true; }
             if (keys["ArrowLeft"] || keys["a"]) { myPos.x -= SPEED; moved = true; }
             if (keys["ArrowRight"] || keys["d"]) { myPos.x += SPEED; moved = true; }
+
+            // タッチ操作時は常に移動が発生しているとみなして同期をONにする
+            if (keys["ArrowUp"] || keys["w"] || keys["ArrowDown"] || keys["s"] || keys["ArrowLeft"] || keys["a"] || keys["ArrowRight"] || keys["d"]) {
+                moved = true;
+            } else {
+                // タッチ移動の滑らかさを保つため、ループ内では常に前回の位置と比較して動いていれば同期
+                moved = true; 
+            }
 
             // 画面外ブレーキ
             if (myPos.x < 0) myPos.x = 0; if (myPos.x > 780) myPos.x = 780;
@@ -160,8 +202,8 @@
             myDiv.style.left = myPos.x + "px";
             myDiv.style.top = myPos.y + "px";
 
-            // 位置を全員に同期（繋がっていなくてもゲームは止めない）
-            if (moved && ws && ws.readyState === WebSocket.OPEN) {
+            // 位置を全員に同期
+            if (ws && ws.readyState === WebSocket.OPEN) {
                 try {
                     ws.send(JSON.stringify({ type: "move", id: myId, color: myColor, x: myPos.x, y: myPos.y }));
                 } catch(e) {}
