@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>3D/2Dサンズ風・同期スクロールレース</title>
     <style>
-        /* 画面全体のスタイルリセット */
         * {
             box-sizing: border-box;
         }
@@ -24,7 +23,7 @@
             touch-action: none; 
         }
         h1 {
-            font-size: 5vw; /* 画面幅に合わせて文字サイズも自動調整 */
+            font-size: 5vw;
             max-size: 24px;
             margin: 0 0 5px 0;
             text-align: center;
@@ -36,32 +35,56 @@
             max-size: 14px;
             text-align: center;
         }
-        /* 【★最強のレスポンシブ最適化】 */
         #game-stage {
             position: relative;
-            width: 95vw; /* 画面横幅の95%まで自動拡大 */
-            max-width: 800px; /* PCの大画面では大きくなりすぎないようにストップ */
-            aspect-ratio: 2 / 1; /* 横2：縦1のサンズ戦比率を絶対に崩さない */
+            width: 95vw;
+            max-width: 800px;
+            aspect-ratio: 2 / 1;
             border: 4px solid #fff;
             background-color: #000;
             overflow: hidden;
             -webkit-tap-highlight-color: transparent; 
         }
-        /* スクロール感を出すための背景のライン */
         .bg-line {
             position: absolute;
             height: 2px;
             background-color: #333;
             width: 100px;
         }
-        /* プレイヤー（ソウル風の四角） */
-        .player {
+        
+        /* 【★重要】プレイヤーとその名前をセットで管理するコンテナ */
+        .player-container {
             position: absolute;
             width: 20px;
             height: 20px;
             z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
-        /* サンズの攻撃：骨 */
+        /* プレイヤー（ソウル風の四角）本体 */
+        .player-body {
+            width: 20px;
+            height: 20px;
+        }
+        /* 頭上の名前プレート */
+        .player-name {
+            position: absolute;
+            bottom: 24px; /* 四角形の少し上に配置 */
+            white-space: nowrap;
+            font-size: 12px;
+            color: #fff;
+            background-color: rgba(0, 0, 0, 0.7); /* 名前を読みやすくする黒背景 */
+            padding: 2px 6px;
+            border-radius: 3px;
+            border: 1px solid #555;
+        }
+        
+        /* 【★修正ポイント】他のプレイヤーを半透明にするCSS設定 */
+        .other-player {
+            opacity: 0.6; /* 60%の透明度にして、すれ違っても邪魔にならないようにする */
+        }
+
         .bone {
             position: absolute;
             width: 15px;
@@ -69,7 +92,6 @@
             border-radius: 4px;
             z-index: 5;
         }
-        /* サンズの攻撃：ブラスターのレーザー */
         .laser {
             position: absolute;
             left: 0;
@@ -90,6 +112,12 @@
     <div id="game-stage"></div>
 
     <script>
+        // 【★新機能】ゲーム開始時に名前を聞く（未入力ならゲストになる）
+        let myName = prompt("あなたの名前を入力してください：", "ゲスト");
+        if (!myName || myName.trim() === "") {
+            myName = "ゲスト";
+        }
+
         const WorkersURL = "game.yoopy2014.workers.dev"; 
 
         const myId = "player_" + Math.floor(Math.random() * 10000);
@@ -117,17 +145,14 @@
             bgLines.push({ element: line, x: Math.random() * 800, speed: Math.random() * 4 + 2 });
         }
 
-        // --- 操作イベント ---
+        // 操作イベント
         window.addEventListener("keydown", (e) => { keys[e.key] = true; });
         window.addEventListener("keyup", (e) => { keys[e.key] = false; });
 
-        // 【★修正ポイント】画面サイズが変わってもタッチ位置を正確に800x400の座標系に変換する
         function updateTouchTarget(e) {
             if (e.touches.length === 0) return;
             const touch = e.touches[0];
             const rect = stage.getBoundingClientRect();
-            
-            // 実際の表示サイズ（rect.width / rect.height）と内部の仮想サイズ（800x400）の比率を計算して補正！
             touchTarget = {
                 x: (touch.clientX - rect.left) * (800 / rect.width) - 10,
                 y: (touch.clientY - rect.top) * (400 / rect.height) - 10
@@ -148,16 +173,29 @@
                 ws.onmessage = (event) => {
                     const data = JSON.parse(event.data);
                     if (data.type === "move" && data.id !== myId) {
-                        let p = document.getElementById(data.id);
-                        if (!p) {
-                            p = document.createElement("div");
-                            p.id = data.id;
-                            p.className = "player";
-                            p.style.backgroundColor = data.color;
-                            stage.appendChild(p);
+                        let pContainer = document.getElementById(data.id);
+                        if (!pContainer) {
+                            // 新しいプレイヤーのコンテナを生成
+                            pContainer = document.createElement("div");
+                            pContainer.id = data.id;
+                            pContainer.className = "player-container other-player"; // 他人は半透明クラスを付与
+
+                            // 頭上の名前を追加
+                            const nDiv = document.createElement("div");
+                            nDiv.className = "player-name";
+                            nDiv.innerText = data.name;
+                            pContainer.appendChild(nDiv);
+
+                            // 四角形本体を追加
+                            const bDiv = document.createElement("div");
+                            bDiv.className = "player-body";
+                            bDiv.style.backgroundColor = data.color;
+                            pContainer.appendChild(bDiv);
+
+                            stage.appendChild(pContainer);
                         }
-                        p.style.left = data.x + "px";
-                        p.style.top = data.y + "px";
+                        pContainer.style.left = data.x + "px";
+                        pContainer.style.top = data.y + "px";
                     }
                 };
 
@@ -175,13 +213,13 @@
             gameTick++;
             let moved = false;
 
-            // ① キーボード移動
+            // キーボード移動
             if (keys["ArrowUp"] || keys["w"]) { myPos.y -= SPEED; moved = true; }
             if (keys["ArrowDown"] || keys["s"]) { myPos.y += SPEED; moved = true; }
             if (keys["ArrowLeft"] || keys["a"]) { myPos.x -= SPEED; moved = true; }
             if (keys["ArrowRight"] || keys["d"]) { myPos.x += SPEED; moved = true; }
 
-            // ② タッチ移動（ベクトル追従）
+            // タッチ移動
             if (touchTarget) {
                 const diffX = touchTarget.x - myPos.x;
                 const diffY = touchTarget.y - myPos.y;
@@ -198,28 +236,46 @@
                 }
             }
 
-            // 画面外ブレーキ（内部解像度の800x400を基準に制限）
             if (myPos.x < 0) myPos.x = 0; if (myPos.x > 780) myPos.x = 780;
             if (myPos.y < 0) myPos.y = 0; if (myPos.y > 380) myPos.y = 380;
 
-            // 自分の位置を画面に反映
-            let myDiv = document.getElementById(myId);
-            if (!myDiv) {
-                myDiv = document.createElement("div");
-                myDiv.id = myId;
-                myDiv.className = "player";
-                myDiv.style.backgroundColor = myColor;
-                myDiv.style.border = "2px solid #fff"; 
-                stage.appendChild(myDiv);
-            }
-            myDiv.style.left = myPos.x + "px";
-            myDiv.style.top = myPos.y + "px";
+            // 自分の位置と名前を画面に反映
+            let myContainer = document.getElementById(myId);
+            if (!myContainer) {
+                myContainer = document.createElement("div");
+                myContainer.id = myId;
+                myContainer.className = "player-container";
 
-            // 低遅延同期通信
-            if (moved && ws && ws.readyState === WebSocket.OPEN) {
-                if (Math.abs(myPos.x - lastSentPos.x) > 1 || Math.abs(myPos.y - lastSentPos.y) > 1) {
+                // 自分の名前
+                const nDiv = document.createElement("div");
+                nDiv.className = "player-name";
+                nDiv.innerText = myName;
+                myContainer.appendChild(nDiv);
+
+                // 自分の四角形（白枠をつけて目立たせる）
+                const bDiv = document.createElement("div");
+                bDiv.className = "player-body";
+                bDiv.style.backgroundColor = myColor;
+                bDiv.style.border = "2px solid #fff"; 
+                myContainer.appendChild(bDiv);
+
+                stage.appendChild(myContainer);
+            }
+            myContainer.style.left = myPos.x + "px";
+            myContainer.style.top = myPos.y + "px";
+
+            // 低遅延同期通信（【★変更】送信データに名前「name」を追加！）
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                if (Math.abs(myPos.x - lastSentPos.x) > 1 || Math.abs(myPos.y - lastSentPos.y) > 1 || gameTick % 60 === 0) {
                     try {
-                        ws.send(JSON.stringify({ type: "move", id: myId, color: myColor, x: Math.round(myPos.x), y: Math.round(myPos.y) }));
+                        ws.send(JSON.stringify({ 
+                            type: "move", 
+                            id: myId, 
+                            name: myName, 
+                            color: myColor, 
+                            x: Math.round(myPos.x), 
+                            y: Math.round(myPos.y) 
+                        }));
                         lastSentPos.x = myPos.x;
                         lastSentPos.y = myPos.y;
                     } catch(e) {}
@@ -243,7 +299,7 @@
                 bone.element.style.left = bone.x + "px";
                 if (bone.x < myPos.x + 20 && bone.x + 15 > myPos.x &&
                     bone.y < myPos.y + 20 && bone.y + bone.h > myPos.y) {
-                    hitPenalty(myDiv);
+                    hitPenalty(myContainer.querySelector(".player-body"));
                 }
                 if (bone.x < -20) { bone.element.remove(); obstacles.splice(index, 1); }
             });
@@ -252,7 +308,7 @@
             lasers.forEach((laser, index) => {
                 if (laser.isActive) {
                     if (myPos.y + 20 > laser.y && myPos.y < laser.y + laser.h) {
-                        hitPenalty(myDiv);
+                        hitPenalty(myContainer.querySelector(".player-body"));
                     }
                 }
                 laser.life--;
@@ -297,11 +353,11 @@
             }, 500);
         }
 
-        function hitPenalty(div) {
+        function hitPenalty(bodyDiv) {
             myPos = { x: 100, y: 190 }; 
             touchTarget = null;
-            div.style.backgroundColor = "#f00"; 
-            setTimeout(() => { div.style.backgroundColor = myColor; }, 200);
+            bodyDiv.style.backgroundColor = "#f00"; 
+            setTimeout(() => { bodyDiv.style.backgroundColor = myColor; }, 200);
         }
     </script>
 </body>
