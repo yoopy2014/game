@@ -167,7 +167,7 @@
         function connectToWebSocket() {
             try {
                 if (ws) { ws.close(); }
-                ws = new WebSocket("wss://" + WorkersURL + "/ws");
+                ws = new WebSocket("wss://" + WorkersURL + "/");
                 ws.binaryType = "arraybuffer"; 
 
                 ws.onmessage = (event) => {
