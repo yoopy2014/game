@@ -31,7 +31,6 @@
             width: 100%;
         }
 
-        /* 【画面切れ対策】縦横比を保ちつつ、画面の縦幅を超えないようにブレーキ */
         #game-stage {
             position: relative;
             width: 100%;
@@ -151,7 +150,7 @@
         const overlay = document.getElementById("overlay");
         let touchTarget = null; 
 
-        // --- 【BGMシステム】自作オリジナル音楽ファイルの指定 ---
+        // --- BGMシステム ---
         const bgm = document.getElementById("bgm-player");
         const BGM_WAITING_URL = "game_waiting.mp3"; 
         const BGM_PLAYING_URL = "game_playing.mp3"; 
@@ -169,15 +168,14 @@
                 return;
             }
 
-            // 正しい相対パスまたはURLをセットして再生
             bgm.src = targetUrl;
-            bgm.volume = 0.25; // 🔊 音量を25%に設定
+            bgm.volume = 0.25;
             
             bgm.play().catch(() => {
-                console.log("オーディオ再生がブラウザにより制限されました。操作を待機します。");
+                console.log("オーディオ再生制限を回避中");
             });
         }
-        // ----------------------------------------------------
+        // ------------------
 
         for(let i=0; i<15; i++) {
             const line = document.createElement("div");
@@ -207,13 +205,13 @@
         stage.addEventListener("touchmove", updateTouchTarget, { passive: true });
         stage.addEventListener("touchend", () => { touchTarget = null; }, { passive: true });
 
-        // 【スタートパスワード機能】
+        // パスワード機能
         document.getElementById("btn-start").addEventListener("click", () => {
             bgm.play().catch(()=>{});
             if (currentStatus !== "waiting") return;
             
             const inputPass = prompt("管理用パスワードを入力してください：");
-            const CORRECT_PASSWORD = "1234"; // 🔑 好きなパスワードに変えられます
+            const CORRECT_PASSWORD = "1234";
 
             if (inputPass === CORRECT_PASSWORD) {
                 if (ws && ws.readyState === WebSocket.OPEN) { 
@@ -267,16 +265,27 @@
                         obstacles.push({ element: bone, x: 800, y: yPos, h: data.height });
                     }
 
+                    // --- 【修正箇所】レーザーの出現と発射タイミングの調整 ---
                     if (data.type === "spawnLaser") {
                         const laser = document.createElement("div");
                         laser.className = "laser";
                         laser.style.height = data.height + "px"; laser.style.top = data.yPos + "px";
                         stage.appendChild(laser);
-                        const laserObj = { element: laser, y: data.yPos, h: data.height, isActive: false, life: 45 };
+                        
+                        // lifeを45から75に増やして、太いレーザーが消えるまでの全体の生存時間を長く調整
+                        const laserObj = { element: laser, y: data.yPos, h: data.height, isActive: false, life: 75 };
                         lasers.push(laserObj);
-                        laser.style.opacity = "0.2"; laser.style.backgroundColor = "#f00";
-                        setTimeout(() => { laserObj.isActive = true; laser.style.opacity = "1"; laser.style.backgroundColor = "#fff"; }, 500);
+                        
+                        laser.style.opacity = "0.2"; laser.style.backgroundColor = "#f00"; // 予兆（赤い線）
+                        
+                        // ここの「500」を「1000」(1.0秒) にして、発射までの猶予を遅くしました！
+                        setTimeout(() => { 
+                            laserObj.isActive = true; 
+                            laser.style.opacity = "1"; 
+                            laser.style.backgroundColor = "#fff"; // 本発射（判定ありの白い線）
+                        }, 1000); 
                     }
+                    // -----------------------------------------------------
 
                     if (data.type === "init") { 
                         updateLeaderboard(data.players); 
