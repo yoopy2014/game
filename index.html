@@ -2,14 +2,19 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>3D/2Dサンズ風・同期スクロールレース</title>
     <style>
+        /* 画面全体のスタイルリセット */
+        * {
+            box-sizing: border-box;
+        }
         body {
             background-color: #000;
             color: #fff;
             font-family: monospace;
             margin: 0;
+            padding: 10px;
             overflow: hidden;
             display: flex;
             flex-direction: column;
@@ -18,27 +23,45 @@
             height: 100vh;
             touch-action: none; 
         }
+        h1 {
+            font-size: 5vw; /* 画面幅に合わせて文字サイズも自動調整 */
+            max-size: 24px;
+            margin: 0 0 5px 0;
+            text-align: center;
+        }
+        p {
+            margin: 0 0 10px 0;
+            color: #aaa;
+            font-size: 3vw;
+            max-size: 14px;
+            text-align: center;
+        }
+        /* 【★最強のレスポンシブ最適化】 */
         #game-stage {
             position: relative;
-            width: 800px;
-            height: 400px;
+            width: 95vw; /* 画面横幅の95%まで自動拡大 */
+            max-width: 800px; /* PCの大画面では大きくなりすぎないようにストップ */
+            aspect-ratio: 2 / 1; /* 横2：縦1のサンズ戦比率を絶対に崩さない */
             border: 4px solid #fff;
             background-color: #000;
             overflow: hidden;
             -webkit-tap-highlight-color: transparent; 
         }
+        /* スクロール感を出すための背景のライン */
         .bg-line {
             position: absolute;
             height: 2px;
             background-color: #333;
             width: 100px;
         }
+        /* プレイヤー（ソウル風の四角） */
         .player {
             position: absolute;
             width: 20px;
             height: 20px;
             z-index: 10;
         }
+        /* サンズの攻撃：骨 */
         .bone {
             position: absolute;
             width: 15px;
@@ -46,6 +69,7 @@
             border-radius: 4px;
             z-index: 5;
         }
+        /* サンズの攻撃：ブラスターのレーザー */
         .laser {
             position: absolute;
             left: 0;
@@ -61,8 +85,8 @@
 </head>
 <body>
 
-    <h1 style="font-size: 24px; margin-bottom: 10px;">3D/2D SANS SPEEDRUN</h1>
-    <p style="margin: 0 0 10px 0; color: #aaa; font-size: 14px;">PC: 矢印キー/WASD | スマホ: 画面タッチした場所へ移動</p>
+    <h1>3D/2D SANS SPEEDRUN</h1>
+    <p>PC: 矢印キー/WASD | スマホ: 画面タッチした場所へ移動</p>
     <div id="game-stage"></div>
 
     <script>
@@ -71,7 +95,7 @@
         const myId = "player_" + Math.floor(Math.random() * 10000);
         const myColor = '#' + Math.floor(Math.random()*16777215).toString(16);
         let myPos = { x: 100, y: 190 };
-        let lastSentPos = { x: 0, y: 0 }; // 無駄な通信を減らすための前回の座標保持
+        let lastSentPos = { x: 0, y: 0 }; 
         const SPEED = 6;
         const keys = {};
         const obstacles = [];
@@ -81,9 +105,7 @@
         let ws = null; 
         
         const stage = document.getElementById("game-stage");
-
-        // --- タッチ操作用のターゲット座標 ---
-        let touchTarget = null; // 指が触れているステージ内の座標（nullの時はタッチされてない）
+        let touchTarget = null; 
 
         // 背景のライン生成
         for(let i=0; i<15; i++) {
@@ -99,13 +121,13 @@
         window.addEventListener("keydown", (e) => { keys[e.key] = true; });
         window.addEventListener("keyup", (e) => { keys[e.key] = false; });
 
-        // タッチ位置を計算してターゲット座標を更新する関数
+        // 【★修正ポイント】画面サイズが変わってもタッチ位置を正確に800x400の座標系に変換する
         function updateTouchTarget(e) {
             if (e.touches.length === 0) return;
             const touch = e.touches[0];
             const rect = stage.getBoundingClientRect();
             
-            // ステージ内の基準座標に変換（ソウルの中心が指に集まるように-10調整）
+            // 実際の表示サイズ（rect.width / rect.height）と内部の仮想サイズ（800x400）の比率を計算して補正！
             touchTarget = {
                 x: (touch.clientX - rect.left) * (800 / rect.width) - 10,
                 y: (touch.clientY - rect.top) * (400 / rect.height) - 10
@@ -116,13 +138,11 @@
         stage.addEventListener("touchmove", updateTouchTarget, { passive: true });
         stage.addEventListener("touchend", () => { touchTarget = null; }, { passive: true });
 
-        // --- 通信サーバーとの接続（低遅延対策） ---
+        // --- 通信サーバーとの接続 ---
         function connectToWebSocket() {
             try {
                 if (ws) { ws.close(); }
                 ws = new WebSocket("wss://" + WorkersURL + "/ws");
-
-                // 送信バッファの詰まりを抑えるため、バイナリや不要なオーバーヘッドを減らす設定
                 ws.binaryType = "arraybuffer"; 
 
                 ws.onmessage = (event) => {
@@ -155,21 +175,19 @@
             gameTick++;
             let moved = false;
 
-            // ① キーボードによる移動
+            // ① キーボード移動
             if (keys["ArrowUp"] || keys["w"]) { myPos.y -= SPEED; moved = true; }
             if (keys["ArrowDown"] || keys["s"]) { myPos.y += SPEED; moved = true; }
             if (keys["ArrowLeft"] || keys["a"]) { myPos.x -= SPEED; moved = true; }
             if (keys["ArrowRight"] || keys["d"]) { myPos.x += SPEED; moved = true; }
 
-            // ② スマホ：タッチ位置に向かって一定速度で追従するロジック（三角関数を使用）
+            // ② タッチ移動（ベクトル追従）
             if (touchTarget) {
                 const diffX = touchTarget.x - myPos.x;
                 const diffY = touchTarget.y - myPos.y;
                 const distance = Math.sqrt(diffX * diffX + diffY * diffY);
 
-                // 指の位置にほぼ到達している場合はピタッと止める（ガタツキ防止）
                 if (distance > SPEED) {
-                    // ベクトルの正規化を用いて、どの方向に対しても常に「SPEED」と同じ速度で進む
                     myPos.x += (diffX / distance) * SPEED;
                     myPos.y += (diffY / distance) * SPEED;
                     moved = true;
@@ -180,7 +198,7 @@
                 }
             }
 
-            // 画面外ブレーキ
+            // 画面外ブレーキ（内部解像度の800x400を基準に制限）
             if (myPos.x < 0) myPos.x = 0; if (myPos.x > 780) myPos.x = 780;
             if (myPos.y < 0) myPos.y = 0; if (myPos.y > 380) myPos.y = 380;
 
@@ -197,8 +215,7 @@
             myDiv.style.left = myPos.x + "px";
             myDiv.style.top = myPos.y + "px";
 
-            // ③ 【タイムラグ大幅削減対策】
-            // 座標に変化があった時、かつ前回の送信位置から1px以上動いている時だけパケットを飛ばす（通信の過密化・遅延を防ぐ）
+            // 低遅延同期通信
             if (moved && ws && ws.readyState === WebSocket.OPEN) {
                 if (Math.abs(myPos.x - lastSentPos.x) > 1 || Math.abs(myPos.y - lastSentPos.y) > 1) {
                     try {
@@ -216,10 +233,11 @@
                 line.element.style.left = line.x + "px";
             });
 
-            // 骨とレーザーの処理（変更なし）
+            // タイムライン攻撃
             if (gameTick % 40 === 0) { createBone(); }
             if (gameTick % 120 === 0) { triggerLaser(); }
 
+            // 骨の移動と当たり判定
             obstacles.forEach((bone, index) => {
                 bone.x -= 5; 
                 bone.element.style.left = bone.x + "px";
@@ -230,6 +248,7 @@
                 if (bone.x < -20) { bone.element.remove(); obstacles.splice(index, 1); }
             });
 
+            // レーザーの当たり判定
             lasers.forEach((laser, index) => {
                 if (laser.isActive) {
                     if (myPos.y + 20 > laser.y && myPos.y < laser.y + laser.h) {
@@ -280,7 +299,7 @@
 
         function hitPenalty(div) {
             myPos = { x: 100, y: 190 }; 
-            touchTarget = null; // タッチ中に当たったら一回ターゲットをクリアして指を離させる
+            touchTarget = null;
             div.style.backgroundColor = "#f00"; 
             setTimeout(() => { div.style.backgroundColor = myColor; }, 200);
         }
