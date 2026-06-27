@@ -31,16 +31,23 @@
             width: 100%;
         }
 
-        #game-stage {
+        /* 【バグ修正】タブレットでの歪みを防ぐため、固定の仮想解像度（800x400）をベースにCSS transformで綺麗に縮尺を合わせる形に変更 */
+        #game-stage-container {
+            width: 800px;
+            height: 400px;
             position: relative;
-            width: 100%;
-            aspect-ratio: 2 / 1;
-            max-height: 55vh; 
-            margin: 0 auto;
             border: 4px solid #fff;
             background-color: #000;
             overflow: hidden;
-            -webkit-tap-highlight-color: transparent;
+            transform-origin: top center; /* 上部中央を基準にスケール */
+        }
+
+        /* 外側の枠（レスポンシブ用ラップ） */
+        #stage-scaler {
+            width: 100%;
+            max-width: 800px;
+            margin: 0 auto;
+            overflow: hidden;
         }
 
         #leaderboard {
@@ -52,7 +59,7 @@
             flex-direction: column;
             min-width: 200px;
             min-height: 200px; 
-            max-height: 450px;
+            max-height: 400px;
             overflow-y: auto;
         }
         #leaderboard h2 { font-size: 16px; margin: 0 0 10px 0; border-bottom: 2px solid #fff; padding-bottom: 5px; text-align: center; }
@@ -65,6 +72,7 @@
         
         .bg-line { position: absolute; height: 2px; background-color: #333; width: 100px; }
         
+        /* プレイヤーやオブジェクトの位置を % ではなく、内部の 800x400 ピクセル座標と完全に一致させる */
         .player-container { 
             position: absolute; 
             width: 20px; 
@@ -96,7 +104,6 @@
         @media (max-width: 900px) {
             .game-wrapper { flex-direction: column; width: 95vw; gap: 10px; }
             #leaderboard { width: 100%; min-height: 150px; max-height: 200px; }
-            #game-stage { max-height: 45vh; }
         }
     </style>
 </head>
@@ -109,8 +116,10 @@
                 <button id="btn-start">ゲーム開始 (60秒)</button>
                 <button id="btn-reset">リセット</button>
             </div>
-            <div id="game-stage">
-                <div id="overlay">名前を入力してください</div>
+            <div id="stage-scaler">
+                <div id="game-stage-container">
+                    <div id="overlay">名前を入力してください</div>
+                </div>
             </div>
         </div>
         <div id="leaderboard">
@@ -145,10 +154,22 @@
         let currentStatus = "waiting"; 
         let isInvincible = false;
 
-        const stage = document.getElementById("game-stage");
+        const stage = document.getElementById("game-stage-container");
+        const stageScaler = document.getElementById("stage-scaler");
         const timerDisplay = document.getElementById("timer-display");
         const overlay = document.getElementById("overlay");
         let touchTarget = null; 
+
+        // 画面フィット機能 (CSS transformによる完全等倍化)
+        function resizeStage() {
+            const containerWidth = stageScaler.clientWidth;
+            const scale = containerWidth / 800;
+            stage.style.transform = `scale(${scale})`;
+            // 下の余白を縮小分だけ詰める計算
+            stageScaler.style.height = (400 * scale) + "px";
+        }
+        window.addEventListener("resize", resizeStage);
+        setTimeout(resizeStage, 100);
 
         // 60FPSブレーキ制御
         let lastTime = performance.now();
@@ -197,6 +218,7 @@
             if (e.touches.length === 0 || currentStatus !== "playing") return;
             const touch = e.touches[0];
             const rect = stage.getBoundingClientRect();
+            // スケールされた画面からのタッチ座標計算を修正
             touchTarget = {
                 x: (touch.clientX - rect.left) * (800 / rect.width) - 10,
                 y: (touch.clientY - rect.top) * (400 / rect.height) - 10
@@ -260,24 +282,21 @@
                         obstacles.push({ element: bone, x: 800, y: yPos, h: data.height });
                     }
 
-                    // --- 【重要修正】レーザー出現処理の完全同期化 ---
                     if (data.type === "spawnLaser") {
                         const laser = document.createElement("div");
                         laser.className = "laser";
                         laser.style.height = data.height + "px"; laser.style.top = data.yPos + "px";
                         stage.appendChild(laser);
                         
-                        // 初期生成時は isActive: false にして、60FPSループ内でも絶対に当たらないようにガード
                         const laserObj = { element: laser, y: data.yPos, h: data.height, isActive: false, life: 75 };
                         lasers.push(laserObj);
                         
-                        laser.style.opacity = "0.2"; laser.style.backgroundColor = "#f00"; // 予兆（赤い線）
+                        laser.style.opacity = "0.2"; laser.style.backgroundColor = "#f00";
                         
-                        // 1000ミリ秒（1秒後）に初めて判定をONにする
                         setTimeout(() => { 
                             laserObj.isActive = true; 
                             laser.style.opacity = "1"; 
-                            laser.style.backgroundColor = "#fff"; // 本発射（白い線）
+                            laser.style.backgroundColor = "#fff"; 
                         }, 1000); 
                     }
 
@@ -300,8 +319,9 @@
                             }
                             pContainer.querySelector(".player-name").innerText = pData.name + " (" + pData.deaths + "💀)";
                             pContainer.querySelector(".player-body").style.backgroundColor = pData.color;
-                            pContainer.style.left = (pData.x / 800 * 100) + "%";
-                            pContainer.style.top = (pData.y / 400 * 100) + "%";
+                            // % ではなく px 単位で厳密に配置
+                            pContainer.style.left = pData.x + "px";
+                            pContainer.style.top = pData.y + "px";
                         }
                         const containers = stage.querySelectorAll(".other-player");
                         containers.forEach(c => { if (!data.players[c.id]) { c.remove(); } });
@@ -373,8 +393,9 @@
             }
             myContainer.querySelector(".player-name").innerText = myName + " (" + myDeaths + "💀)";
             myContainer.querySelector(".player-body").style.backgroundColor = myColor;
-            myContainer.style.left = (myPos.x / 800 * 100) + "%";
-            myContainer.style.top = (myPos.y / 400 * 100) + "%";
+            // % ではなく px 単位で配置
+            myContainer.style.left = myPos.x + "px";
+            myContainer.style.top = myPos.y + "px";
 
             if (ws && ws.readyState === WebSocket.OPEN) {
                 if (moved || gameTick % 30 === 0) {
@@ -390,21 +411,19 @@
             bgLines.forEach(line => {
                 line.x -= line.speed;
                 if (line.x < -100) { line.x = 800; line.element.style.top = Math.random() * 400 + "px"; }
-                line.element.style.left = (line.x / 800 * 100) + "%";
+                line.element.style.left = line.x + "px";
             });
 
             obstacles.forEach((bone, index) => {
                 bone.x -= 5; 
-                bone.element.style.left = (bone.x / 800 * 100) + "%";
+                bone.element.style.left = bone.x + "px";
                 if (currentStatus === "playing" && !isInvincible && bone.x < myPos.x + 20 && bone.x + 15 > myPos.x && bone.y < myPos.y + 20 && bone.y + bone.h > myPos.y) {
                     hitPenalty(myContainer.querySelector(".player-body"), 1);
                 }
                 if (bone.x < -20) { bone.element.remove(); obstacles.splice(index, 1); }
             });
 
-            // --- 【修正箇所】判定のチェック制限 ---
             lasers.forEach((laser, index) => {
-                // laserObj.isActive が true（1秒経過して白くなったとき）の時のみ当たり判定を走らせる
                 if (laser.isActive && currentStatus === "playing" && !isInvincible) {
                     if (myPos.y + 20 > laser.y && myPos.y < laser.y + laser.h) { 
                         hitPenalty(myContainer.querySelector(".player-body"), 1); 
