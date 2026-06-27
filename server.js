@@ -70,15 +70,38 @@ function startGameSystem() {
         }
 
         if (gameState.status === "playing") {
+            // 骨の出現（これまで通り）
             if (serverTick % 40 === 0) {
                 const isTop = Math.random() > 0.5;
                 const height = Math.random() * 150 + 50;
                 broadcast({ type: "spawnBone", isTop: isTop, height: height });
             }
+
+            // 【重要修正】120チィックごとに縦または横のレーザーをランダム発射
             if (serverTick % 120 === 0) {
-                const height = 60;
-                const yPos = Math.random() * (400 - height);
-                broadcast({ type: "spawnLaser", yPos: yPos, height: height });
+                const isVertical = Math.random() > 0.5; // 50%の確率で縦レーザー
+
+                if (isVertical) {
+                    // 縦レーザーを生成 (上から下へ突き抜ける)
+                    const width = 60;
+                    const xPos = Math.random() * (800 - width);
+                    broadcast({ 
+                        type: "spawnLaser", 
+                        direction: "vertical", 
+                        xPos: xPos, 
+                        width: width 
+                    });
+                } else {
+                    // 横レーザーを生成 (左から右へ突き抜ける)
+                    const height = 60;
+                    const yPos = Math.random() * (400 - height);
+                    broadcast({ 
+                        type: "spawnLaser", 
+                        direction: "horizontal", 
+                        yPos: yPos, 
+                        height: height 
+                    });
+                }
             }
         }
 
@@ -88,7 +111,6 @@ function startGameSystem() {
 wss.on('connection', (ws) => {
     clientSockets.add(ws);
     
-    // この接続（ws）がどのプレイヤーIDのものかを紐付けるための変数
     let myPlayerId = null;
 
     ws.send(JSON.stringify({ type: "init", state: gameState, players: players }));
@@ -98,7 +120,6 @@ wss.on('connection', (ws) => {
             const data = JSON.parse(message);
 
             if (data.type === "move") {
-                // 初回移動時にIDを記録しておく
                 if (!myPlayerId) {
                     myPlayerId = data.id;
                 }
@@ -126,14 +147,10 @@ wss.on('connection', (ws) => {
         } catch (e) {}
     });
 
-    // 【★修正】タブが閉じられた、または切断されたときの処理
     const handleDisconnect = () => {
         clientSockets.delete(ws);
-        
-        // 切断したプレイヤーのデータをリストから完全に消す
         if (myPlayerId && players[myPlayerId]) {
             delete players[myPlayerId];
-            // 削除した最新のプレイヤーリストを全員に即時同期
             broadcast({ type: "sync", players: players });
         }
     };
