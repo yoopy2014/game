@@ -94,7 +94,11 @@
         }
         .other-player { opacity: 0.6; }
         .bone { position: absolute; width: 15px; background-color: #fff; border-radius: 4px; z-index: 5; }
-        .laser { position: absolute; left: 0; width: 100%; background-color: #fff; border-top: 4px solid #00f; border-bottom: 4px solid #f00; z-index: 6; opacity: 0; transition: opacity 0.1s; }
+        
+        /* 【修正】レーザーの基本CSS（縦横兼用にするため、位置や方向のスタイルはJS側で詳しく指定します） */
+        .laser { position: absolute; background-color: #fff; z-index: 6; opacity: 0; transition: opacity 0.1s; }
+        .laser-horizontal { left: 0; width: 100%; border-top: 4px solid #00f; border-bottom: 4px solid #f00; }
+        .laser-vertical { top: 0; height: 100%; border-left: 4px solid #00f; border-right: 4px solid #f00; }
         
         #overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; text-align: center; }
 
@@ -157,7 +161,7 @@
         const overlay = document.getElementById("overlay");
         let touchTarget = null; 
 
-        // --- 【新規】効果音自動生成システム (Web Audio API) ---
+        // 効果音自動生成システム (Web Audio API)
         let audioCtx = null;
         function initAudio() {
             if (!audioCtx) {
@@ -165,7 +169,7 @@
             }
         }
 
-        // 予兆音（ピピピッ）
+        // 予兆音
         function playWarningSound() {
             initAudio();
             if (!audioCtx) return;
@@ -173,24 +177,20 @@
             const gain = audioCtx.createGain();
             osc.connect(gain);
             gain.connect(audioCtx.destination);
-
-            osc.type = 'square'; // サンズ風のファミコンっぽい矩形波
+            osc.type = 'square';
             osc.frequency.setValueAtTime(800, audioCtx.currentTime);
-            gain.gain.setValueAtTime(0.05, audioCtx.currentTime); // 音量は控えめ
-
-            // プツプツと3回鳴らす
+            gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
             gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
             gain.gain.setValueAtTime(0, audioCtx.currentTime + 0.05);
             gain.gain.setValueAtTime(0.05, audioCtx.currentTime + 0.1);
             gain.gain.setValueAtTime(0, audioCtx.currentTime + 0.15);
             gain.gain.setValueAtTime(0.05, audioCtx.currentTime + 0.2);
             gain.gain.setValueAtTime(0, audioCtx.currentTime + 0.25);
-
             osc.start();
             osc.stop(audioCtx.currentTime + 0.3);
         }
 
-        // 本発射音（ズキューン！）
+        // 本発射音
         function playLaserSound() {
             initAudio();
             if (!audioCtx) return;
@@ -198,19 +198,14 @@
             const gain = audioCtx.createGain();
             osc.connect(gain);
             gain.connect(audioCtx.destination);
-
-            osc.type = 'sawtooth'; // 鋭いノコギリ波
-            // 高音から低音へ超高速で滑り落ちる（周波数スイープ）
+            osc.type = 'sawtooth';
             osc.frequency.setValueAtTime(1200, audioCtx.currentTime);
             osc.frequency.exponentialRampToValueAtTime(80, audioCtx.currentTime + 0.4);
-
             gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
-            gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.4); // 徐々に消える
-
+            gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.4);
             osc.start();
             osc.stop(audioCtx.currentTime + 0.4);
         }
-        // -----------------------------------------------------
 
         function resizeStage() {
             const containerWidth = stageScaler.clientWidth;
@@ -238,12 +233,10 @@
             } else if (status === "playing") {
                 targetUrl = BGM_PLAYING_URL;
             }
-
             if (targetUrl === "" || (bgm.src.endsWith(targetUrl) && !bgm.paused)) {
                 if (status === "finished") bgm.pause();
                 return;
             }
-
             bgm.src = targetUrl;
             bgm.volume = 0.25;
             bgm.play().catch(() => {});
@@ -258,14 +251,14 @@
         }
 
         window.addEventListener("keydown", (e) => { 
-            initAudio(); // 画面操作時にオーディオを有効化
+            initAudio();
             bgm.play().catch(()=>{}); 
             keys[e.key] = true; 
         });
         window.addEventListener("keyup", (e) => { keys[e.key] = false; });
 
         function updateTouchTarget(e) {
-            initAudio(); // 画面操作時にオーディオを有効化
+            initAudio();
             bgm.play().catch(()=>{}); 
             if (e.touches.length === 0 || currentStatus !== "playing") return;
             const touch = e.touches[0];
@@ -335,26 +328,49 @@
                         obstacles.push({ element: bone, x: 800, y: yPos, h: data.height });
                     }
 
+                    // --- 【重要修正】縦横兼用のレーザー出現処理 ---
                     if (data.type === "spawnLaser") {
                         const laser = document.createElement("div");
-                        laser.className = "laser";
-                        laser.style.height = data.height + "px"; laser.style.top = data.yPos + "px";
+                        
+                        // サーバー側から direction: "vertical" または "horizontal" が送られてくることを想定
+                        // もし送られてこない（古いサーバー）なら、デフォルトで横（horizontal）にするガード処理
+                        const dir = data.direction || "horizontal"; 
+                        
+                        laser.className = "laser " + (dir === "vertical" ? "laser-vertical" : "laser-horizontal");
+                        
+                        // 方向に応じた初期サイズ・位置設定
+                        if (dir === "vertical") {
+                            laser.style.width = data.width + "px";
+                            laser.style.left = data.xPos + "px";
+                        } else {
+                            laser.style.height = data.height + "px";
+                            laser.style.top = data.yPos + "px";
+                        }
+                        
                         stage.appendChild(laser);
                         
-                        const laserObj = { element: laser, y: data.yPos, h: data.height, isActive: false, life: 75 };
+                        // 判定用データをオブジェクトに保存
+                        const laserObj = { 
+                            element: laser, 
+                            direction: dir,
+                            x: data.xPos || 0,
+                            y: data.yPos || 0,
+                            w: data.width || data.height, // 縦ならwidth、横ならheightを判定幅に
+                            h: data.height || 400,
+                            isActive: false, 
+                            life: 75 
+                        };
                         lasers.push(laserObj);
                         
-                        laser.style.opacity = "0.2"; laser.style.backgroundColor = "#f00";
+                        laser.style.opacity = "0.2"; laser.style.backgroundColor = "#f00"; // 予兆
                         
-                        // 【追加】予兆が出た瞬間に警告音を鳴らす
                         if (currentStatus === "playing") { playWarningSound(); }
                         
                         setTimeout(() => { 
                             laserObj.isActive = true; 
                             laser.style.opacity = "1"; 
-                            laser.style.backgroundColor = "#fff"; 
+                            laser.style.backgroundColor = "#fff"; // 本発射
                             
-                            // 【追加】本発射の瞬間にレーザー音を鳴らす
                             if (currentStatus === "playing") { playLaserSound(); }
                         }, 1000); 
                     }
@@ -480,10 +496,19 @@
                 if (bone.x < -20) { bone.element.remove(); obstacles.splice(index, 1); }
             });
 
+            // --- 【重要修正】縦横両方のレーザーの当たり判定ロジック ---
             lasers.forEach((laser, index) => {
                 if (laser.isActive && currentStatus === "playing" && !isInvincible) {
-                    if (myPos.y + 20 > laser.y && myPos.y < laser.y + laser.h) { 
-                        hitPenalty(myContainer.querySelector(".player-body"), 1); 
+                    if (laser.direction === "vertical") {
+                        // 縦レーザーの当たり判定 (プレイヤーの横幅20px)
+                        if (myPos.x + 20 > laser.x && myPos.x < laser.x + laser.w) {
+                            hitPenalty(myContainer.querySelector(".player-body"), 1);
+                        }
+                    } else {
+                        // 横レーザーの当たり判定 (プレイヤーの縦幅20px)
+                        if (myPos.y + 20 > laser.y && myPos.y < laser.y + laser.h) { 
+                            hitPenalty(myContainer.querySelector(".player-body"), 1); 
+                        }
                     }
                 }
                 laser.life--;
